@@ -1,5 +1,6 @@
-#!/usr/bin/env python
-import os, argparse, requests, subprocess, logging
+#!/usr/bin/env python3
+
+import os,  argparse, requests, subprocess, logging
 import pygit2 as git
 from urllib.parse import urlparse, ParseResult
 from collections.abc import Iterator
@@ -157,6 +158,8 @@ def traverse(
 
 GH_SCHEME = "git@github.com:"
 
+GH_TEMPLATES=[".github", "docs", ""]
+
 pr_cache = dict[str, list[any]]()
 
 pr_state_style = {
@@ -211,6 +214,7 @@ class GH:
     url: ParseResult
     token: git.credentials.UserPass
     stack: Stack
+    template: str | None
 
     def __init__(self, repo: git.Repository, stack: Stack) -> None:
         self.stack = stack
@@ -218,6 +222,11 @@ class GH:
         self.url = get_gh_url(repo)
         self.owner, self.repository = get_gh_owner_repository(self.url)
         self.token = get_gh_token(self.url)
+        for t in GH_TEMPLATES:
+            filename = os.path.join(repo.path, t, "pull_request_template.md")
+            if os.path.exists(filename):
+                self.template = open(filename).read()
+                break
 
     def _call(
         self,
@@ -336,6 +345,7 @@ class GH:
                 "title": title or branch_name,
                 "base": base,
                 "head": branch_name,
+                "body": self.template,
                 "draft": True,
             },
         )
@@ -688,7 +698,7 @@ def update_pr(args: Args):
 # endregion commands
 
 
-def main():
+def main(argv: list[str]):
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--repository", default=".")
     parser.add_argument(
@@ -737,10 +747,7 @@ def main():
         "sync", help="creates or updates PRs of the stack"
     ).set_defaults(func=pr_sync)
 
-    args = parser.parse_args()
+    args = parser.parse_args(args=argv)
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
     args.func(args)
-
-
-main()
