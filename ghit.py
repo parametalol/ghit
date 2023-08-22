@@ -9,6 +9,7 @@ class Args:
     stack: str
     repository: str
     offline: bool
+    title: str
 
 
 COMMENT_FIRST_LINE = "Current dependencies on/for this PR:"
@@ -323,14 +324,14 @@ class GH:
                 )
         return prs
 
-    def create_pr(self, base: str, branch_name: str) -> any:
+    def create_pr(self, base: str, branch_name: str, title: str = "") -> any:
         pr = self._call(
             endpoint="pulls",
             method="POST",
             body={
-                "title": branch_name,
+                "title": title or branch_name,
                 "base": base,
-                "head": f"{self.repo}:{branch_name}",
+                "head": branch_name,
                 "draft": True,
             },
         )
@@ -611,12 +612,14 @@ def pr_sync(args: Args):
 
 class MyRemoteCallback(git.RemoteCallbacks):
     refname: str | None
+    message: str | None
 
     def push_update_reference(self, refname, message):
-        if message:
-            print("message:", message)
-        else:
-            self.refname = refname
+        self.message = message
+        self.refname = refname
+
+    def credentials(self, url, username_from_url, allowed_types):
+        return get_git_ssh_credentials()
 
 
 def stack_sync(args: Args):
@@ -624,16 +627,26 @@ def stack_sync(args: Args):
     stack = open_stack(args.stack)
     if repo.is_empty:
         return
+    origin = repo.remotes["origin"]
+    if not origin:
+        return
+
+    mrc = MyRemoteCallback()
+    print("Fetching from", origin.url)
+    progress = origin.fetch(callbacks=mrc)
+    print("\treceived objects:", progress.received_objects)
+    print("\ttotal deltas:", progress.total_deltas)
+    print("\ttotal objects:", progress.total_objects)
+
     for parent, record in traverse(stack):
         if parent is None:
             continue
         branch = repo.branches[record.branch_name]
         if not branch.upstream:
-            mrc = MyRemoteCallback()
-            origin = repo.remotes["origin"]
             full_name = branch.resolve().name
+            mrc = MyRemoteCallback()
             origin.push([full_name], callbacks=mrc)
-            if mrc.refname:
+            if not mrc.message:
                 # TODO: weak logic?
                 branch_ref: str = origin.get_refspec(0).transform(full_name)
                 branch.upstream = repo.branches.remote[
@@ -655,7 +668,7 @@ def update_pr(args: Args):
         if record.branch_name == current.branch_name:
             prs = gh.find_PRs(record.branch_name)
             if len(prs) == 0:
-                gh.create_pr(parent.branch_name, record.branch_name)
+                gh.create_pr(parent.branch_name, record.branch_name, args.title)
             else:
                 gh.comment(record.branch_name)
             break
@@ -694,15 +707,25 @@ def main():
 
     parser_stack = commands.add_parser("stack", aliases=["s", "st"])
     parser_stack_sub = parser_stack.add_subparsers()
-    parser_stack_sub.add_parser("restack").set_defaults(func=restack)
-    parser_stack_sub.add_parser("sync").set_defaults(func=stack_sync)
+    parser_stack_sub.add_parser(
+        "restack",
+        help="suggest git commands to rebase the branches according to the stack",
+    ).set_defaults(func=restack)
+    parser_stack_sub.add_parser(
+        "sync", help="fetch from origin and push stack branches upstream"
+    ).set_defaults(func=stack_sync)
 
     parser_pr = commands.add_parser("pr")
     parser_pr_sub = parser_pr.add_subparsers()
+    upr = parser_pr_sub.add_parser(
+        "update",
+        help="create new draft PR or update the existing PR opened from the current branch",
+    )
+    upr.add_argument("-t", "--title", help="PR title")
+    upr.set_defaults(func=update_pr)
     parser_pr_sub.add_parser(
-        "update", help="update or create the PR opened from the current branch"
-    ).set_defaults(func=update_pr)
-    parser_pr_sub.add_parser("sync").set_defaults(func=pr_sync)
+        "sync", help="creates or updates PRs of the stack"
+    ).set_defaults(func=pr_sync)
 
     args = parser.parse_args()
     args.func(args)
