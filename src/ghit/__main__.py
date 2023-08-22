@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
 import sys
-import ghit
+from .ghit import ghit
+
 
 def main():
-    ghit.main(sys.argv)
+    ghit(sys.argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

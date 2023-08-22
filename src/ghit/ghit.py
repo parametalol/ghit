@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 
-import os,  argparse, requests, subprocess, logging
+import os
+import argparse
+import requests
+import subprocess
+import logging
 import pygit2 as git
-from urllib.parse import urlparse, ParseResult
+from urllib.parse import urlparse
+from urllib.parse import ParseResult
 from collections.abc import Iterator
 
 
@@ -158,7 +163,7 @@ def traverse(
 
 GH_SCHEME = "git@github.com:"
 
-GH_TEMPLATES=[".github", "docs", ""]
+GH_TEMPLATES = [".github", "docs", ""]
 
 pr_cache = dict[str, list[any]]()
 
@@ -253,9 +258,7 @@ class GH:
     def find_PRs(self, branch: str) -> list[any]:
         if branch not in pr_cache:
             logging.debug(f"branch {branch} not in cache")
-            pr = self._call(
-                "pulls", {"head": f"{self.owner}:{branch}", "state": "all"}
-            )
+            pr = self._call("pulls", {"head": f"{self.owner}:{branch}", "state": "all"})
             logging.debug(f"gh found prs: {len(pr)}")
             pr_cache[branch] = pr
         return pr_cache[branch]
@@ -354,7 +357,7 @@ class GH:
         else:
             pr_cache[branch_name] = [pr]
         self.comment(branch_name, True)
-        print(f"Created draft PR ", inactive(f"#{pr['number']}"), ".", sep="")
+        print("Created draft PR ", inactive(f"#{pr['number']}"), ".", sep="")
         return pr
 
 
@@ -583,32 +586,6 @@ def restack(args: Args):
         print(f"  Run `git rebase -i {parent.branch_name} {record.branch_name}`.")
 
 
-def push(args: Args):
-    repo = git.Repository(args.repository)
-    if args.offline or not repo.remotes:
-        return
-
-    stack = open_stack(args.stack)
-
-    origin = repo.remotes["origin"]
-
-    callback = git.RemoteCallbacks(credentials=get_git_ssh_credentials())
-
-    # progress = origin.fetch(callbacks=callback)
-    # print("received objects:",progress.received_objects)
-    # print("total deltas:",progress.total_deltas)
-    # print("total objects:",progress.total_objects)
-
-    # for _, record in traverse(stack):
-    #    branch = self.repo.branches[record.branch_name]
-    #    print(f"fetching from {branch.upstream.branch_name}...")
-    # remote = repo.remotes[branch.upstream.remote_name]
-    # print(remote.fetch_refspecs)
-    # progress = remote.fetch(callbacks=callback)
-    # print("total deltas:",progress.total_deltas)
-    # print("total objects:",progress.total_objects)
-
-
 def pr_sync(args: Args):
     repo = git.Repository(args.repository)
     stack = open_stack(args.stack)
@@ -672,7 +649,14 @@ def stack_sync(args: Args):
                     branch_ref.removeprefix("refs/remotes/")
                 ]
                 print(
-                    f"Pushed {emphasis(record.branch_name)} to remote {emphasis(origin.url)} and set upstream to {emphasis(branch.upstream.branch_name)}."
+                    "Pushed ",
+                    emphasis(record.branch_name),
+                    " to remote ",
+                    emphasis(origin.url),
+                    " and set upstream to ",
+                    emphasis(branch.upstream.branch_name),
+                    ".",
+                    sep="",
                 )
 
 
@@ -698,7 +682,7 @@ def update_pr(args: Args):
 # endregion commands
 
 
-def main(argv: list[str]):
+def ghit(argv: list[str]):
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--repository", default=".")
     parser.add_argument(
