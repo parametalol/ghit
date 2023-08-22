@@ -178,6 +178,9 @@ def get_gh_url(repo: git.Repository) -> ParseResult:
 
 
 def get_gh_token(url: ParseResult) -> str:
+    token = os.getenv("GITHUB_TOKEN")
+    if token:
+        return token
     p = subprocess.run(
         args=["git", "credential", "fill"],
         input=f"protocol={url.scheme}\nhost={url.netloc}\n",
