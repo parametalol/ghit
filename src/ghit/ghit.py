@@ -560,8 +560,13 @@ def restack(args: Args):
     for parent, record in traverse(stack):
         if parent is None:
             continue
-        parent_ref = repo.references[f"refs/heads/{parent.branch_name}"]
-        record_ref = repo.references[f"refs/heads/{record.branch_name}"]
+        parent_ref = repo.references.get(f"refs/heads/{parent.branch_name}")
+        if parent_ref is None:
+            continue        
+        record_ref = repo.references.get(f"refs/heads/{record.branch_name}")
+        if record_ref is None:
+            print(warning("No local branch"), emphasis(record.branch_name), warning("found"))
+            continue
         a, _ = repo.ahead_behind(parent_ref.target, record_ref.target)
         if a == 0:
             print(
