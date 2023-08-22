@@ -125,6 +125,8 @@ class StackRecord:
 
 
 def add_child(stack: Stack, parents: list[str], child: str):
+    if child.startswith("#"):
+        return
     branch = child.lstrip(".")
     depth = len(child) - len(branch)
     for _ in range(0, len(parents) - depth):
@@ -140,8 +142,7 @@ def open_stack(filename: str) -> Stack:
     parents = list[str]()
     with open(filename) as f:
         for line in f.readlines():
-            if not line.startswith("#"):
-                add_child(stack, parents, line.rstrip())
+            add_child(stack, parents, line.rstrip())
     return stack
 
 

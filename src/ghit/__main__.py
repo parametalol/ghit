@@ -5,7 +5,7 @@ from .ghit import ghit
 
 
 def main():
-    ghit(sys.argv)
+    ghit(sys.argv[1:])
 
 
 if __name__ == "__main__":
