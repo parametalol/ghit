@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os, argparse, requests, subprocess
+import os, argparse, requests, subprocess, logging
 import pygit2 as git
 from urllib.parse import urlparse, ParseResult
 from collections.abc import Iterator
@@ -10,6 +10,7 @@ class Args:
     repository: str
     offline: bool
     title: str
+    debug: bool
 
 
 COMMENT_FIRST_LINE = "Current dependencies on/for this PR:"
@@ -242,9 +243,12 @@ class GH:
 
     def find_PRs(self, branch: str) -> list[any]:
         if branch not in pr_cache:
-            pr_cache[branch] = self._call(
-                "pulls", {"head": f"{self.repository}:{branch}", "state": "all"}
+            logging.debug(f"branch {branch} not in cache")
+            pr = self._call(
+                "pulls", {"head": f"{self.owner}:{branch}", "state": "all"}
             )
+            logging.debug(f"gh found prs: {len(pr)}")
+            pr_cache[branch] = pr
         return pr_cache[branch]
 
     def pr_info(self, branch_name: str) -> str | None:
@@ -345,7 +349,12 @@ class GH:
 
 
 def get_GH(repo: git.Repository, stack: Stack, offline: bool) -> GH | None:
-    return GH(repo, stack) if not offline and is_gh(repo) else None
+    gh = GH(repo, stack) if not offline and is_gh(repo) else None
+    if gh:
+        logging.debug(f"found gh repository {gh.repository}")
+    else:
+        logging.debug("gh not found")
+    return gh
 
 
 # endregion GH
@@ -473,7 +482,7 @@ def ls(args: Args):
         elif branch:
             line.append(color("*"))
 
-        if gh is not None:
+        if parent is not None and gh is not None:
             info = gh.pr_info(record.branch_name)
             if info is not None:
                 line.append(info)
@@ -686,6 +695,7 @@ def main():
         "-s", "--stack", default=os.getenv("GHIT_STACK") or ".ghit.stack"
     )
     parser.add_argument("-o", "--offline", action="store_true")
+    parser.add_argument("-d", "--debug", action="store_true")
 
     commands = parser.add_subparsers(required=True)
 
@@ -728,6 +738,8 @@ def main():
     ).set_defaults(func=pr_sync)
 
     args = parser.parse_args()
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
     args.func(args)
 
 
