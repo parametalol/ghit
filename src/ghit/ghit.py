@@ -458,49 +458,66 @@ def ls(args: Args):
     gh = get_GH(repo, stack, args.offline)
 
     for parent, record in traverse(stack):
-        a = 0
-        branch = repo.branches.get(record.branch_name)
-        if parent and branch:
-            a, _ = repo.ahead_behind(
+        parent_prefix = parent_prefix[: record.depth - 1]
+        current = record.branch_name == checked_out
+        last_child = record.index == parent.children - 1 if parent else False
+
+        line = _print_line(
+            repo, current, parent_prefix, parent, record.branch_name, last_child
+        )
+        if parent and gh:
+            info = gh.pr_info(record.branch_name)
+            if info:
+                line.append(info)
+
+        print(" ".join(line))
+        if parent is not None:
+            parent_prefix.append("  " if record.index == parent.children - 1 else "│ ")
+
+
+def _print_line(
+    repo: git.Repository,
+    current: bool,
+    parent_prefix: list[str],
+    parent: StackRecord,
+    branch_name: str,
+    last_child: bool,
+) -> list[str]:
+    line_color = calm if current else normal
+    line = [line_color("⯈" if current else " "), *parent_prefix]
+
+    behind = 0
+    branch = repo.branches.get(branch_name)
+    if parent:
+        if branch:
+            behind, _ = repo.ahead_behind(
                 repo.branches[parent.branch_name].target,
                 branch.target,
             )
 
-        parent_prefix = parent_prefix[: record.depth - 1]
-        current = record.branch_name == checked_out
-        color = calm if current else normal
-        line = [color("⯈" if current else " "), *parent_prefix]
-        if parent is not None:
-            if record.index == parent.children - 1:
-                line.append("└─" if a == 0 else "└⭦")
-                parent_prefix.append("  ")
-            else:
-                line.append("├─" if a == 0 else "├⭦")
-                parent_prefix.append("│ ")
+        g1 = "└" if last_child else "├"
+        g2 = "⭦" if behind else "─"
+        line.append(g1 + g2)
 
-        if branch:
-            line.append((color if a == 0 else warning)(record.branch_name))
-        else:
-            line.append((color if a == 0 else warning)(deleted(record.branch_name)))
+    line.append(
+        (deleted if not branch else warning if behind else line_color)(branch_name)
+    )
 
-        if a != 0:
-            line.append(warning(f"({a} behind)"))
+    if behind != 0:
+        line.append(warning(f"({behind} behind)"))
 
-        if branch and branch.upstream:
+    if branch:
+        if branch.upstream:
             a, b = repo.ahead_behind(
                 branch.target,
                 branch.upstream.target,
             )
             if a or b:
                 line.append(with_style("dim", "↕" if a and b else "↑" if a else "↓"))
-        elif branch:
-            line.append(color("*"))
+        else:
+            line.append(line_color("*"))
 
-        if parent is not None and gh is not None:
-            info = gh.pr_info(record.branch_name)
-            if info is not None:
-                line.append(info)
-        print(" ".join(line))
+    return line
 
 
 def _move(args: Args, command: str):
@@ -523,6 +540,8 @@ def _move(args: Args, command: str):
         prev_name = record.branch_name
     if to_checkout_name is not None:
         checkout(repo, parent, to_checkout_name)
+    else:
+        _jump(args, "top")
 
 
 def up(args):
@@ -562,10 +581,14 @@ def restack(args: Args):
             continue
         parent_ref = repo.references.get(f"refs/heads/{parent.branch_name}")
         if parent_ref is None:
-            continue        
+            continue
         record_ref = repo.references.get(f"refs/heads/{record.branch_name}")
         if record_ref is None:
-            print(warning("No local branch"), emphasis(record.branch_name), warning("found"))
+            print(
+                warning("No local branch"),
+                emphasis(record.branch_name),
+                warning("found"),
+            )
             continue
         a, _ = repo.ahead_behind(parent_ref.target, record_ref.target)
         if a == 0:
