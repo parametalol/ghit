@@ -233,6 +233,8 @@ class GH:
             if os.path.exists(filename):
                 self.template = open(filename).read()
                 break
+        else:
+            self.template = None
 
     def _call(
         self,
@@ -421,6 +423,9 @@ def checkout(repo: git.Repository, parent: StackRecord, branch_name: str | None)
                     inactive(f"\t[{commit.short_id}] {commit.message.splitlines()[0]}")
                 )
 
+    if not branch.upstream:
+        print("The branch doesn't have an upstream.")
+        return
     a, b = repo.ahead_behind(
         branch.target,
         branch.upstream.target,
