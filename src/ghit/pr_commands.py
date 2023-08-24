@@ -2,12 +2,8 @@ from .common import *
 from .gh import initGH
 
 def pr_sync(args: Args):
-    repo, stack = connect(args)
-    if repo.is_empty:
-        return
-
-    gh = initGH(repo, stack, args.offline)
-    if gh is None:
+    repo, stack, gh = connect(args)
+    if repo.is_empty or not gh:
         return
     for record in stack.traverse():
         if record.parent is None:
@@ -20,8 +16,7 @@ def pr_sync(args: Args):
 
 
 def update_pr(args: Args):
-    repo, stack = connect(args)
-    gh = initGH(repo, stack, args.offline)
+    repo, stack, gh = connect(args)
     if gh is None:
         return
     origin = repo.remotes["origin"]

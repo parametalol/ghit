@@ -3,6 +3,7 @@ import pygit2 as git
 from .stack import *
 from .gitools import *
 from .styling import *
+from .gh import initGH, GH
 
 @dataclass
 class Args:
@@ -13,16 +14,16 @@ class Args:
     debug: bool
 
 
-def connect(args: Args) -> tuple[git.Repository, Stack]:
+def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
     repo = git.Repository(args.repository)
     if repo.is_empty:
-        return repo, None
+        return repo, None, None
     stack = open_stack(args.stack)
     if not stack:
         stack = Stack()
         current = get_current_branch(repo)
         stack.add_child([], current.branch_name)
-    return repo, stack
+    return repo, stack, initGH(repo, stack, args.offline)
 
 
 

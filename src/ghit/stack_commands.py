@@ -3,14 +3,12 @@ from .styling import *
 from .gh import initGH
 
 def ls(args: Args):
-    repo, stack = connect(args)
+    repo, stack, gh = connect(args)
     if repo.is_empty:
         return
 
     checked_out = get_current_branch(repo).branch_name
     parent_prefix: list[str] = []
-
-    gh = initGH(repo, stack, args.offline)
 
     for record in stack.traverse():
         parent_prefix = parent_prefix[: record.depth - 1]
@@ -84,7 +82,7 @@ def _print_line(
 
 
 def _move(args: Args, command: str):
-    repo, stack = connect(args)
+    repo, stack, _ = connect(args)
     to_checkout_name = get_current_branch(repo).branch_name
     parent: StackRecord = None
 
@@ -116,7 +114,7 @@ def down(args):
 
 
 def _jump(args: Args, command: str):
-    repo, stack = connect(args)
+    repo, stack, _ = connect(args)
     parent: StackRecord = None
     to_checkout_name: str | None = None
     for record in stack.traverse():
@@ -137,7 +135,7 @@ def bottom(args):
 
 
 def restack(args: Args):
-    repo, stack = connect(args)
+    repo, stack, _ = connect(args)
     for record in stack.traverse():
         parent = record.parent
         if parent is None:
@@ -183,7 +181,7 @@ def restack(args: Args):
 
 
 def stack_sync(args: Args):
-    repo, stack = connect(args)
+    repo, stack, _ = connect(args)
     if repo.is_empty:
         return
     origin = repo.remotes["origin"]
