@@ -169,10 +169,37 @@ GH_TEMPLATES = [".github", "docs", ""]
 pr_cache = dict[str, list[any]]()
 
 pr_state_style = {
-    "open": good,
-    "closed": lambda m: danger(deleted(m)),
-    "merged": calm,
+    "OPEN": good,
+    "CLOSED": lambda m: danger(deleted(m)),
+    "MERGED": calm,
+    "DRAFT": inactive,
 }
+
+
+def pr_state(pr) -> str:
+    if pr["draft"]:
+        return "DRAFT"
+    if pr["merged_at"]:
+        return "MERGED"
+    return str(pr["state"]).upper()
+
+
+def pr_number_with_style(branch: git.Branch, pr: any) -> str:
+    line: list[str] = []
+    if pr["locked"]:
+        line.append("🔒")
+    style = lambda m: with_style("dim", pr_state_style[pr_state(pr)](m))
+    if pr["draft"]:
+        line.append(style("draft"))
+    if not branch or pr["head"]["sha"] != branch.target.hex:
+        line.append(warning("⟳"))
+    line.append(style(f'#{pr["number"]}'))
+    return " ".join(line)
+
+
+def pr_title_with_style(pr: any) -> str:
+    style = lambda m: with_style("dim", pr_state_style[pr_state(pr)](m))
+    return style(pr["title"])
 
 
 def get_gh_owner_repository(url: ParseResult) -> (str, str):
@@ -267,25 +294,13 @@ class GH:
         return pr_cache[branch]
 
     def pr_info(self, branch_name: str) -> str | None:
-        result = []
         prs = self.find_PRs(branch_name)
         branch = self.repo.branches.get(branch_name)
-
-        for pr in prs:
-            line = []
-            state = pr_state_style[pr["state"]]
-            if pr["locked"]:
-                line.append("🔒")
-            if not branch or pr["head"]["sha"] != branch.target.hex:
-                line.append(warning("⟳"))
-            if pr["draft"]:
-                state = inactive
-                line.append("draft")
-            line.append(state(f"#{pr['number']}"))
-            if len(prs) == 1:
-                line.append(state(pr["title"]))
-            result.append(" ".join(line))
-        return ", ".join(result)
+        if len(prs) == 1:
+            return " ".join(
+                [pr_number_with_style(branch, prs[0]), pr_title_with_style(prs[0])]
+            )
+        return ", ".join(pr_number_with_style(branch, pr) for pr in prs)
 
     def _find_comment(self, pr: int) -> any:
         comments = self._call(f"issues/{pr}/comments")
@@ -308,8 +323,8 @@ class GH:
                 md.append("  " * record.depth + f"* {record.branch_name}")
         return "\n".join(md)
 
-    def comment(self, branch_name: str, new: bool = False) -> list[any]:
-        prs = self.find_PRs(branch_name)
+    def comment(self, branch: git.Branch, new: bool = False) -> list[any]:
+        prs = self.find_PRs(branch.branch_name)
         for pr in prs:
             comment = self._find_comment(pr["number"]) if not new else None
             md = self._make_comment(pr["number"])
@@ -324,7 +339,7 @@ class GH:
                 )
                 print(
                     "Updated comment in ",
-                    pr_state_style[pr["state"]](f"#{pr['number']}"),
+                    pr_number_with_style(branch, pr),
                     ".",
                     sep="",
                 )
@@ -337,7 +352,7 @@ class GH:
                 )
                 print(
                     "Commented ",
-                    pr_state_style[pr["state"]](f"#{pr['number']}"),
+                    pr_number_with_style(branch, pr),
                     ".",
                     sep="",
                 )
@@ -350,7 +365,7 @@ class GH:
             body={
                 "title": title or branch_name,
                 "base": base,
-                "head": branch_name,
+                "head": f"{self.owner}:{branch_name}",
                 "body": self.template,
                 "draft": True,
             },
@@ -359,8 +374,9 @@ class GH:
             pr_cache[branch_name].append(pr)
         else:
             pr_cache[branch_name] = [pr]
-        self.comment(branch_name, True)
-        print("Created draft PR ", inactive(f"#{pr['number']}"), ".", sep="")
+        branch = self.repo.lookup_branch(branch_name)
+        print("Created draft PR ", pr_number_with_style(branch, pr), ".", sep="")
+        self.comment(branch, True)
         return pr
 
 
@@ -505,7 +521,9 @@ def _print_line(
         line.append(g1 + g2)
 
     line.append(
-        (deleted if not branch else warning if behind else line_color)(branch_name)
+        (deleted if not branch else warning if behind else line_color)(
+            with_style("bold", branch_name) if current else branch_name
+        )
     )
 
     if behind != 0:
@@ -673,25 +691,27 @@ def stack_sync(args: Args):
             continue
         branch = repo.branches[record.branch_name]
         if not branch.upstream:
-            full_name = branch.resolve().name
-            mrc = MyRemoteCallback()
-            origin.push([full_name], callbacks=mrc)
-            if not mrc.message:
-                # TODO: weak logic?
-                branch_ref: str = origin.get_refspec(0).transform(full_name)
-                branch.upstream = repo.branches.remote[
-                    branch_ref.removeprefix("refs/remotes/")
-                ]
-                print(
-                    "Pushed ",
-                    emphasis(record.branch_name),
-                    " to remote ",
-                    emphasis(origin.url),
-                    " and set upstream to ",
-                    emphasis(branch.upstream.branch_name),
-                    ".",
-                    sep="",
-                )
+            update_upstream(repo, origin, branch)
+
+
+def update_upstream(repo: git.Repository, origin: git.Remote, branch: git.Branch):
+    full_name = branch.resolve().name
+    mrc = MyRemoteCallback()
+    origin.push([full_name], callbacks=mrc)
+    if not mrc.message:
+        # TODO: weak logic?
+        branch_ref: str = origin.get_refspec(0).transform(full_name)
+        branch.upstream = repo.branches.remote[branch_ref.removeprefix("refs/remotes/")]
+        print(
+            "Pushed ",
+            emphasis(branch.branch_name),
+            " to remote ",
+            emphasis(origin.url),
+            " and set upstream to ",
+            emphasis(branch.upstream.branch_name),
+            ".",
+            sep="",
+        )
 
 
 def update_pr(args: Args):
@@ -700,9 +720,15 @@ def update_pr(args: Args):
     gh = get_GH(repo, stack, args.offline)
     if gh is None:
         return
+    origin = repo.remotes["origin"]
+    if not origin:
+        return
     current = get_current_branch(repo)
     for parent, record in traverse(stack):
         if record.branch_name == current.branch_name:
+            branch = repo.branches[record.branch_name]
+            if not branch.upstream:
+                update_upstream(repo, origin, branch)
             prs = gh.find_PRs(record.branch_name)
             if len(prs) == 0:
                 gh.create_pr(parent.branch_name, record.branch_name, args.title)
@@ -768,4 +794,10 @@ def ghit(argv: list[str]):
     args = parser.parse_args(args=argv)
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
-    args.func(args)
+    if args.debug:
+        args.func(args)
+    else:
+        try:
+            args.func(args)
+        except Exception as e:
+            print("Error:", e)
