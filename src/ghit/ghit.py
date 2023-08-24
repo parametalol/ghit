@@ -9,8 +9,10 @@ import pygit2 as git
 from urllib.parse import urlparse
 from urllib.parse import ParseResult
 from collections.abc import Iterator
+from dataclasses import dataclass
 
 
+@dataclass
 class Args:
     stack: str
     repository: str
@@ -102,74 +104,76 @@ def emphasis(m: str) -> str:
 
 # region stack
 
-Stack = dict[str, any]
-
 
 class StackRecord:
-    branch_name: str | None
-    depth: int
-    children: int
-    sibling_index: int
-
     def __init__(
         self,
-        branch: str | None = None,
-        depth: int = 0,
-        children: int = 0,
-        index: int = 0,
-    ) -> None:
-        self.branch_name = branch
+        parent: any,
+        branch_name: str | None,
+        depth: int,
+        children: int,
+        index: int,
+    ):
+        self.parent: StackRecord | None = parent
+        self.branch_name = branch_name
         self.depth = depth
         self.children = children
         self.index = index
 
 
-def add_child(stack: Stack, parents: list[str], child: str):
-    if child.startswith("#"):
-        return
-    branch = child.lstrip(".")
-    depth = len(child) - len(branch)
-    for _ in range(0, len(parents) - depth):
-        parents.pop()
-    parents.append(branch)
-    for p in range(0, depth):
-        stack = stack[parents[p]]
-    stack[branch] = {}
+class Stack:
+    def __init__(self) -> None:
+        self._stack: dict[str, Stack] = {}
+
+    def add_child(self, parents: list[str], child: str):
+        if child.startswith("#"):
+            return
+        branch = child.lstrip(".")
+        depth = len(child) - len(branch)
+        for _ in range(0, len(parents) - depth):
+            parents.pop()
+        parents.append(branch)
+        s = self
+        for p in range(0, depth):
+            s = s._stack[parents[p]]
+        s._stack[branch] = Stack()
+
+    def is_empty(self) -> bool:
+        return len(self._stack) == 0
+
+    def traverse(
+        self, parent: StackRecord = None, depth: int = 0
+    ) -> Iterator[StackRecord]:
+        i = 0
+        for branch_name, substack in self._stack.items():
+            current = StackRecord(parent, branch_name, depth, len(substack._stack), i)
+            yield current
+            i += 1
+            if not substack.is_empty():
+                yield from substack.traverse(current, depth + 1)
 
 
 def connect(args: Args) -> tuple[git.Repository, Stack]:
     repo = git.Repository(args.repository)
     if repo.is_empty:
         return repo, None
-    stack = open_stack(args.stack)
+    stack = _open_stack(args.stack)
     if not stack:
         stack = Stack()
         current = get_current_branch(repo)
-        stack[current.branch_name] = {}
+        stack.add_child([], current.branch_name)
     return repo, stack
 
 
-def open_stack(filename: str) -> Stack:
+def _open_stack(filename: str) -> Stack | None:
     if not os.path.isfile(filename):
         return None
     stack = Stack()
     parents = list[str]()
     with open(filename) as f:
         for line in f.readlines():
-            add_child(stack, parents, line.rstrip())
+            stack.add_child(parents, line.rstrip())
     return stack
-
-
-def traverse(
-    stack: Stack, parent: StackRecord = None, depth: int = 0
-) -> Iterator[tuple[StackRecord, StackRecord]]:
-    i = 0
-    for k, v in stack.items():
-        current = StackRecord(k, depth, len(v), i)
-        yield parent, current
-        i += 1
-        if len(v) > 0:
-            yield from traverse(v, current, depth + 1)
 
 
 # endregion stack
@@ -198,15 +202,13 @@ def pr_state(pr) -> str:
     return str(pr["state"]).upper()
 
 
-def pr_number_with_style(branch: git.Branch, pr: any) -> str:
+def pr_number_with_style(pr: any) -> str:
     line: list[str] = []
     if pr["locked"]:
         line.append("🔒")
     style = lambda m: with_style("dim", pr_state_style[pr_state(pr)](m))
     if pr["draft"]:
         line.append(style("draft"))
-    if not branch or pr["head"]["sha"] != branch.target.hex:
-        line.append(warning("⟳"))
     line.append(style(f'#{pr["number"]}'))
     return " ".join(line)
 
@@ -214,6 +216,10 @@ def pr_number_with_style(branch: git.Branch, pr: any) -> str:
 def pr_title_with_style(pr: any) -> str:
     style = lambda m: with_style("dim", pr_state_style[pr_state(pr)](m))
     return style(pr["title"])
+
+
+def pr_with_style(pr: any) -> str:
+    return pr_number_with_style(pr) + " " + pr_title_with_style(pr)
 
 
 def get_gh_owner_repository(url: ParseResult) -> (str, str):
@@ -254,28 +260,23 @@ def is_gh(repo: git.Repository) -> bool:
     return url.netloc.find("github.com") >= 0
 
 
-class GH:
-    repo: git.Repository
-    owner: str
-    repository: str
-    url: ParseResult
-    token: git.credentials.UserPass
-    stack: Stack
-    template: str | None
+def is_sync(pr: any, branch: git.Branch) -> bool:
+    return not branch or pr["head"]["sha"] == branch.target.hex
 
+
+class GH:
     def __init__(self, repo: git.Repository, stack: Stack) -> None:
         self.stack = stack
         self.repo = repo
         self.url = get_gh_url(repo)
         self.owner, self.repository = get_gh_owner_repository(self.url)
         self.token = get_gh_token(self.url)
+        self.template: str | None = None
         for t in GH_TEMPLATES:
             filename = os.path.join(repo.path, t, "pull_request_template.md")
             if os.path.exists(filename):
                 self.template = open(filename).read()
                 break
-        else:
-            self.template = None
 
     def _call(
         self,
@@ -310,11 +311,19 @@ class GH:
     def pr_info(self, branch_name: str) -> str | None:
         prs = self.find_PRs(branch_name)
         branch = self.repo.branches.get(branch_name)
+
         if len(prs) == 1:
-            return " ".join(
-                [pr_number_with_style(branch, prs[0]), pr_title_with_style(prs[0])]
+            if is_sync(prs[0], branch):
+                return warning("⟳") + pr_with_style(prs[0])
+            return pr_with_style(prs[0])
+        return ", ".join(
+            (
+                warning("⟳") + pr_number_with_style(pr)
+                if is_sync(prs[0], branch)
+                else pr_number_with_style(pr)
             )
-        return ", ".join(pr_number_with_style(branch, pr) for pr in prs)
+            for pr in prs
+        )
 
     def _find_comment(self, pr: int) -> any:
         comments = self._call(f"issues/{pr}/comments")
@@ -325,7 +334,7 @@ class GH:
 
     def _make_comment(self, current_pr_number: int) -> str:
         md = [COMMENT_FIRST_LINE, ""]
-        for _, record in traverse(self.stack):
+        for record in self.stack.traverse():
             prs = self.find_PRs(record.branch_name)
             if prs is not None and len(prs) > 0:
                 for pr in prs:
@@ -337,9 +346,8 @@ class GH:
                 md.append("  " * record.depth + f"* {record.branch_name}")
         return "\n".join(md)
 
-    def comment(self, branch: git.Branch, new: bool = False) -> list[any]:
-        prs = self.find_PRs(branch.branch_name)
-        for pr in prs:
+    def comment(self, branch: git.Branch, new: bool = False):
+        for pr in self.find_PRs(branch.branch_name):
             comment = self._find_comment(pr["number"]) if not new else None
             md = self._make_comment(pr["number"])
             if comment is not None:
@@ -351,12 +359,7 @@ class GH:
                     {"body": md},
                     "PATCH",
                 )
-                print(
-                    "Updated comment in ",
-                    pr_number_with_style(branch, pr),
-                    ".",
-                    sep="",
-                )
+                print(f"Updated comment in {pr_number_with_style(branch, pr)}.")
             else:
                 self._call(
                     f"issues/{pr['number']}/comments",
@@ -364,13 +367,7 @@ class GH:
                     {"body": md},
                     "POST",
                 )
-                print(
-                    "Commented ",
-                    pr_number_with_style(branch, pr),
-                    ".",
-                    sep="",
-                )
-        return prs
+                print(f"Commented {pr_number_with_style(branch, pr)}.")
 
     def create_pr(self, base: str, branch_name: str, title: str = "") -> any:
         pr = self._call(
@@ -490,13 +487,13 @@ def ls(args: Args):
 
     gh = get_GH(repo, stack, args.offline)
 
-    for parent, record in traverse(stack):
+    for record in stack.traverse():
         parent_prefix = parent_prefix[: record.depth - 1]
         current = record.branch_name == checked_out
-        last_child = record.index == parent.children - 1 if parent else False
+        last_child = record.index == record.parent.children - 1 if record.parent else False
 
         line = _print_line(
-            repo, current, parent_prefix, parent, record.branch_name, last_child
+            repo, current, parent_prefix, record.parent, record.branch_name, last_child
         )
         if gh:
             info = gh.pr_info(record.branch_name)
@@ -504,8 +501,8 @@ def ls(args: Args):
                 line.append(info)
 
         print(" ".join(line))
-        if parent is not None:
-            parent_prefix.append("  " if record.index == parent.children - 1 else "│ ")
+        if record.parent:
+            parent_prefix.append("  " if record.index == record.parent.children - 1 else "│ ")
 
 
 def _print_line(
@@ -562,7 +559,8 @@ def _move(args: Args, command: str):
 
     pick_next: bool = False
     prev_name: str | None = None
-    for parent, record in traverse(stack):
+    for record in stack.traverse():
+        parent = record.parent
         if pick_next:
             to_checkout_name = record.branch_name
             break
@@ -590,7 +588,8 @@ def _jump(args: Args, command: str):
     repo, stack = connect(args)
     parent: StackRecord = None
     to_checkout_name: str | None = None
-    for parent, record in traverse(stack):
+    for record in stack.traverse():
+        parent = record.parent
         to_checkout_name = record.branch_name
         if command == "top":
             break
@@ -608,7 +607,8 @@ def bottom(args):
 
 def restack(args: Args):
     repo, stack = connect(args)
-    for parent, record in traverse(stack):
+    for record in stack.traverse():
+        parent = record.parent
         if parent is None:
             continue
         parent_ref = repo.references.get(f"refs/heads/{parent.branch_name}")
@@ -649,19 +649,18 @@ def restack(args: Args):
 
 def pr_sync(args: Args):
     repo, stack = connect(args)
-
     if repo.is_empty:
         return
 
     gh = get_GH(repo, stack, args.offline)
     if gh is None:
         return
-    for parent, record in traverse(stack):
-        if parent is None:
+    for record in stack.traverse():
+        if record.parent is None:
             continue
         prs = gh.find_PRs(record.branch_name)
         if len(prs) == 0:
-            gh.create_pr(parent.branch_name, record.branch_name)
+            gh.create_pr(record.parent.branch_name, record.branch_name)
         else:
             gh.comment(record.branch_name)
 
@@ -693,8 +692,8 @@ def stack_sync(args: Args):
     print("\ttotal deltas:", progress.total_deltas)
     print("\ttotal objects:", progress.total_objects)
 
-    for parent, record in traverse(stack):
-        if parent is None:
+    for record in stack.traverse():
+        if record.parent is None:
             continue
         branch = repo.branches[record.branch_name]
         if not branch.upstream:
@@ -730,17 +729,18 @@ def update_pr(args: Args):
     if not origin:
         return
     current = get_current_branch(repo)
-    for parent, record in traverse(stack):
-        if record.branch_name == current.branch_name:
-            branch = repo.branches[record.branch_name]
-            if not branch.upstream:
-                update_upstream(repo, origin, branch)
-            prs = gh.find_PRs(record.branch_name)
-            if len(prs) == 0:
-                gh.create_pr(parent.branch_name, record.branch_name, args.title)
-            else:
-                gh.comment(record.branch_name)
-            break
+    for record in stack.traverse():
+        if record.branch_name != current.branch_name:
+            continue
+        branch = repo.branches[record.branch_name]
+        if not branch.upstream:
+            update_upstream(repo, origin, branch)
+        prs = gh.find_PRs(record.branch_name)
+        if len(prs) == 0:
+            gh.create_pr(record.parent.branch_name, record.branch_name, args.title)
+        else:
+            gh.comment(record.branch_name)
+        break
     else:
         print(warning("Couldn't find current branch in the stack."))
 
