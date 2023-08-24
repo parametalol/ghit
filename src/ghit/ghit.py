@@ -137,7 +137,21 @@ def add_child(stack: Stack, parents: list[str], child: str):
     stack[branch] = {}
 
 
+def connect(args: Args) -> tuple[git.Repository, Stack]:
+    repo = git.Repository(args.repository)
+    if repo.is_empty:
+        return repo, None
+    stack = open_stack(args.stack)
+    if not stack:
+        stack = Stack()
+        current = get_current_branch(repo)
+        stack[current.branch_name] = {}
+    return repo, stack
+
+
 def open_stack(filename: str) -> Stack:
+    if not os.path.isfile(filename):
+        return None
     stack = Stack()
     parents = list[str]()
     with open(filename) as f:
@@ -467,11 +481,9 @@ def checkout(repo: git.Repository, parent: StackRecord, branch_name: str | None)
 
 
 def ls(args: Args):
-    repo = git.Repository(args.repository)
+    repo, stack = connect(args)
     if repo.is_empty:
         return
-
-    stack = open_stack(args.stack)
 
     checked_out = get_current_branch(repo).branch_name
     parent_prefix: list[str] = []
@@ -486,7 +498,7 @@ def ls(args: Args):
         line = _print_line(
             repo, current, parent_prefix, parent, record.branch_name, last_child
         )
-        if parent and gh:
+        if gh:
             info = gh.pr_info(record.branch_name)
             if info:
                 line.append(info)
@@ -544,8 +556,7 @@ def _print_line(
 
 
 def _move(args: Args, command: str):
-    stack = open_stack(args.stack)
-    repo = git.Repository(args.repository)
+    repo, stack = connect(args)
     to_checkout_name = get_current_branch(repo).branch_name
     parent: StackRecord = None
 
@@ -576,8 +587,7 @@ def down(args):
 
 
 def _jump(args: Args, command: str):
-    stack = open_stack(args.stack)
-    repo = git.Repository(args.repository)
+    repo, stack = connect(args)
     parent: StackRecord = None
     to_checkout_name: str | None = None
     for parent, record in traverse(stack):
@@ -597,8 +607,7 @@ def bottom(args):
 
 
 def restack(args: Args):
-    repo = git.Repository(args.repository)
-    stack = open_stack(args.stack)
+    repo, stack = connect(args)
     for parent, record in traverse(stack):
         if parent is None:
             continue
@@ -639,8 +648,7 @@ def restack(args: Args):
 
 
 def pr_sync(args: Args):
-    repo = git.Repository(args.repository)
-    stack = open_stack(args.stack)
+    repo, stack = connect(args)
 
     if repo.is_empty:
         return
@@ -671,8 +679,7 @@ class MyRemoteCallback(git.RemoteCallbacks):
 
 
 def stack_sync(args: Args):
-    repo = git.Repository(args.repository)
-    stack = open_stack(args.stack)
+    repo, stack = connect(args)
     if repo.is_empty:
         return
     origin = repo.remotes["origin"]
@@ -715,8 +722,7 @@ def update_upstream(repo: git.Repository, origin: git.Remote, branch: git.Branch
 
 
 def update_pr(args: Args):
-    repo = git.Repository(args.repository)
-    stack = open_stack(args.stack)
+    repo, stack = connect(args)
     gh = get_GH(repo, stack, args.offline)
     if gh is None:
         return
