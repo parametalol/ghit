@@ -2,14 +2,14 @@
 
 import os
 import argparse
-import requests
-import subprocess
 import logging
 import pygit2 as git
-from urllib.parse import urlparse
-from urllib.parse import ParseResult
-from collections.abc import Iterator
 from dataclasses import dataclass
+
+from .gitools import *
+from .styling import *
+from .stack import Stack, open_stack, StackRecord
+from .gh import initGH
 
 
 @dataclass
@@ -21,457 +21,16 @@ class Args:
     debug: bool
 
 
-COMMENT_FIRST_LINE = "Current dependencies on/for this PR:"
-
-# region style
-
-COLORS: dict[str, int] = {
-    "black": 30,
-    "red": 31,
-    "green": 32,
-    "yellow": 33,
-    "blue": 34,
-    "magenta": 35,
-    "cyan": 36,
-    "light gray": 37,
-    "default": 39,
-    "dark gray": 90,
-    "light red": 91,
-    "light green": 92,
-    "light yellow": 93,
-    "light blue": 94,
-    "light magenta": 95,
-    "light cyan": 96,
-    "white": 97,
-}
-STYLES: dict[str, int] = {
-    "bold": 1,
-    "dim": 2,
-    "underlined": 4,
-    "blink": 5,
-    "reverse": 7,
-    "hidden": 8,
-    "strikethrough": 9,
-}
-ESC = "\033"
-
-
-def with_color(color: str, m: str) -> str:
-    return f"{ESC}[{COLORS[color]}m{m}{ESC}[{COLORS['default']}m"
-
-
-def with_style(style: str, m: str) -> str:
-    return f"{ESC}[{STYLES[style]}m{m}{ESC}[0m"
-
-
-def normal(m: str) -> str:
-    return m
-
-
-def deleted(m: str) -> str:
-    return with_style("strikethrough", m)
-
-
-def inactive(m: str) -> str:
-    return with_color("dark gray", m)
-
-
-def danger(m: str) -> str:
-    return with_color("red", m)
-
-
-def good(m: str) -> str:
-    return with_color("green", m)
-
-
-def warning(m: str) -> str:
-    return with_color("yellow", m)
-
-
-def calm(m: str) -> str:
-    return with_color("light blue", m)
-
-
-def colorful(m: str) -> str:
-    return with_color("magenta", m)
-
-
-def emphasis(m: str) -> str:
-    return with_color("cyan", m)
-
-
-# endregion style
-
-# region stack
-
-
-class StackRecord:
-    def __init__(
-        self,
-        parent: any,
-        branch_name: str | None,
-        depth: int,
-        children: int,
-        index: int,
-    ):
-        self.parent: StackRecord | None = parent
-        self.branch_name = branch_name
-        self.depth = depth
-        self.children = children
-        self.index = index
-
-
-class Stack:
-    def __init__(self) -> None:
-        self._stack: dict[str, Stack] = {}
-
-    def add_child(self, parents: list[str], child: str):
-        if child.startswith("#"):
-            return
-        branch = child.lstrip(".")
-        depth = len(child) - len(branch)
-        for _ in range(0, len(parents) - depth):
-            parents.pop()
-        parents.append(branch)
-        s = self
-        for p in range(0, depth):
-            s = s._stack[parents[p]]
-        s._stack[branch] = Stack()
-
-    def is_empty(self) -> bool:
-        return len(self._stack) == 0
-
-    def traverse(
-        self, parent: StackRecord = None, depth: int = 0
-    ) -> Iterator[StackRecord]:
-        i = 0
-        for branch_name, substack in self._stack.items():
-            current = StackRecord(parent, branch_name, depth, len(substack._stack), i)
-            yield current
-            i += 1
-            if not substack.is_empty():
-                yield from substack.traverse(current, depth + 1)
-
-
 def connect(args: Args) -> tuple[git.Repository, Stack]:
     repo = git.Repository(args.repository)
     if repo.is_empty:
         return repo, None
-    stack = _open_stack(args.stack)
+    stack = open_stack(args.stack)
     if not stack:
         stack = Stack()
         current = get_current_branch(repo)
         stack.add_child([], current.branch_name)
     return repo, stack
-
-
-def _open_stack(filename: str) -> Stack | None:
-    if not os.path.isfile(filename):
-        return None
-    stack = Stack()
-    parents = list[str]()
-    with open(filename) as f:
-        for line in f.readlines():
-            stack.add_child(parents, line.rstrip())
-    return stack
-
-
-# endregion stack
-
-# region GH
-
-GH_SCHEME = "git@github.com:"
-
-GH_TEMPLATES = [".github", "docs", ""]
-
-pr_cache = dict[str, list[any]]()
-
-pr_state_style = {
-    "OPEN": good,
-    "CLOSED": lambda m: danger(deleted(m)),
-    "MERGED": calm,
-    "DRAFT": inactive,
-}
-
-
-def pr_state(pr) -> str:
-    if pr["draft"]:
-        return "DRAFT"
-    if pr["merged_at"]:
-        return "MERGED"
-    return str(pr["state"]).upper()
-
-
-def pr_number_with_style(pr: any) -> str:
-    line: list[str] = []
-    if pr["locked"]:
-        line.append("🔒")
-    style = lambda m: with_style("dim", pr_state_style[pr_state(pr)](m))
-    if pr["draft"]:
-        line.append(style("draft"))
-    line.append(style(f'#{pr["number"]}'))
-    return " ".join(line)
-
-
-def pr_title_with_style(pr: any) -> str:
-    style = lambda m: with_style("dim", pr_state_style[pr_state(pr)](m))
-    return style(pr["title"])
-
-
-def pr_with_style(pr: any) -> str:
-    return pr_number_with_style(pr) + " " + pr_title_with_style(pr)
-
-
-def get_gh_owner_repository(url: ParseResult) -> (str, str):
-    _, owner, repository = url.path.split("/", 2)
-    return owner, repository.removesuffix(".git")
-
-
-def get_gh_url(repo: git.Repository) -> ParseResult:
-    url: str = repo.remotes["origin"].url
-    if url.startswith(GH_SCHEME):
-        insteadof = repo.config["url.git@github.com:.insteadof"]
-        url = insteadof + url.removeprefix(GH_SCHEME)
-    return urlparse(url)
-
-
-def get_gh_token(url: ParseResult) -> str:
-    token = os.getenv("GITHUB_TOKEN")
-    if token:
-        return token
-    p = subprocess.run(
-        args=["git", "credential", "fill"],
-        input=f"protocol={url.scheme}\nhost={url.netloc}\n",
-        capture_output=True,
-        text=True,
-    )
-    credentials = {}
-    if p.returncode == 0:
-        for line in p.stdout.splitlines():
-            k, v = line.split("=", 1)
-            credentials[k] = v
-    return credentials["password"]
-
-
-def is_gh(repo: git.Repository) -> bool:
-    if repo.is_empty or repo.is_bare:
-        return False
-    url = get_gh_url(repo)
-    return url.netloc.find("github.com") >= 0
-
-
-def is_sync(pr: any, branch: git.Branch) -> bool:
-    return not branch or pr["head"]["sha"] == branch.target.hex
-
-
-class GH:
-    def __init__(self, repo: git.Repository, stack: Stack) -> None:
-        self.stack = stack
-        self.repo = repo
-        self.url = get_gh_url(repo)
-        self.owner, self.repository = get_gh_owner_repository(self.url)
-        self.token = get_gh_token(self.url)
-        self.template: str | None = None
-        for t in GH_TEMPLATES:
-            filename = os.path.join(repo.path, t, "pull_request_template.md")
-            if os.path.exists(filename):
-                self.template = open(filename).read()
-                break
-
-    def _call(
-        self,
-        endpoint: str,
-        params: dict[str, str] = {},
-        body: any = None,
-        method: str = "GET",
-    ) -> str:
-        response = requests.request(
-            method,
-            url=f"https://api.github.com/repos/{self.owner}/{self.repository}/{endpoint}",
-            params=params,
-            headers={
-                "Authorization": f"Bearer {self.token}",
-                "Accept": "application/vnd.github.v3+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-            json=body,
-        )
-        if not response.ok:
-            raise BaseException(response.text)
-        return response.json()
-
-    def find_PRs(self, branch: str) -> list[any]:
-        if branch not in pr_cache:
-            logging.debug(f"branch {branch} not in cache")
-            pr = self._call("pulls", {"head": f"{self.owner}:{branch}", "state": "all"})
-            logging.debug(f"gh found prs: {len(pr)}")
-            pr_cache[branch] = pr
-        return pr_cache[branch]
-
-    def pr_info(self, branch_name: str) -> str | None:
-        prs = self.find_PRs(branch_name)
-        branch = self.repo.branches.get(branch_name)
-
-        if len(prs) == 1:
-            if is_sync(prs[0], branch):
-                return warning("⟳") + pr_with_style(prs[0])
-            return pr_with_style(prs[0])
-        return ", ".join(
-            (
-                warning("⟳") + pr_number_with_style(pr)
-                if is_sync(prs[0], branch)
-                else pr_number_with_style(pr)
-            )
-            for pr in prs
-        )
-
-    def _find_comment(self, pr: int) -> any:
-        comments = self._call(f"issues/{pr}/comments")
-        for comment in comments:
-            if str(comment["body"]).startswith(COMMENT_FIRST_LINE):
-                return comment
-        return None
-
-    def _make_comment(self, current_pr_number: int) -> str:
-        md = [COMMENT_FIRST_LINE, ""]
-        for record in self.stack.traverse():
-            prs = self.find_PRs(record.branch_name)
-            if prs is not None and len(prs) > 0:
-                for pr in prs:
-                    line = "  " * record.depth + f"* **PR #{pr['number']}**"
-                    if pr["number"] == current_pr_number:
-                        line += " 👈"
-                    md.append(line)
-            else:
-                md.append("  " * record.depth + f"* {record.branch_name}")
-        return "\n".join(md)
-
-    def comment(self, branch: git.Branch, new: bool = False):
-        for pr in self.find_PRs(branch.branch_name):
-            comment = self._find_comment(pr["number"]) if not new else None
-            md = self._make_comment(pr["number"])
-            if comment is not None:
-                if comment["body"] == md:
-                    continue
-                self._call(
-                    f"issues/comments/{comment['id']}",
-                    None,
-                    {"body": md},
-                    "PATCH",
-                )
-                print(f"Updated comment in {pr_number_with_style(branch, pr)}.")
-            else:
-                self._call(
-                    f"issues/{pr['number']}/comments",
-                    None,
-                    {"body": md},
-                    "POST",
-                )
-                print(f"Commented {pr_number_with_style(branch, pr)}.")
-
-    def create_pr(self, base: str, branch_name: str, title: str = "") -> any:
-        pr = self._call(
-            endpoint="pulls",
-            method="POST",
-            body={
-                "title": title or branch_name,
-                "base": base,
-                "head": f"{self.owner}:{branch_name}",
-                "body": self.template,
-                "draft": True,
-            },
-        )
-        if branch_name in pr_cache:
-            pr_cache[branch_name].append(pr)
-        else:
-            pr_cache[branch_name] = [pr]
-        branch = self.repo.lookup_branch(branch_name)
-        print("Created draft PR ", pr_number_with_style(branch, pr), ".", sep="")
-        self.comment(branch, True)
-        return pr
-
-
-def get_GH(repo: git.Repository, stack: Stack, offline: bool) -> GH | None:
-    gh = GH(repo, stack) if not offline and is_gh(repo) else None
-    if gh:
-        logging.debug(f"found gh repository {gh.repository}")
-    else:
-        logging.debug("gh not found")
-    return gh
-
-
-# endregion GH
-
-
-# region git
-
-
-def get_git_ssh_credentials() -> git.credentials.KeypairFromAgent:
-    return git.KeypairFromAgent("git")
-
-
-def get_default_branch(repo: git.Repository) -> str:
-    remote_head = repo.references["refs/remotes/origin/HEAD"].resolve().shorthand
-    return remote_head.removeprefix("origin/")
-
-
-def get_current_branch(repo: git.Repository) -> git.Branch:
-    return repo.lookup_branch(repo.head.resolve().shorthand)
-
-
-def last_commits(
-    repo: git.Repository, target: git.Oid, n: int = 1
-) -> Iterator[git.Commit]:
-    i = 0
-    for commit in repo.walk(target):
-        yield commit
-        i += 1
-        if i >= n:
-            break
-
-
-def checkout(repo: git.Repository, parent: StackRecord, branch_name: str | None):
-    if branch_name is None:
-        return
-    branch = repo.branches.get(branch_name)
-    if not branch:
-        print(danger("Error:"), emphasis(branch_name), danger("not found in local."))
-        return
-    repo.checkout(branch)
-    print(f"Checked-out {emphasis(branch_name)}.")
-    if parent is not None:
-        parent_branch = repo.branches[parent.branch_name]
-        a, _ = repo.ahead_behind(parent_branch.target, branch.target)
-        if a:
-            print(f"This branch has fallen back behind {emphasis(parent.branch_name)}.")
-            print("You may want to restack to pick up the following commits:")
-            for commit in last_commits(repo, parent_branch.target, a):
-                print(
-                    inactive(f"\t[{commit.short_id}] {commit.message.splitlines()[0]}")
-                )
-
-    if not branch.upstream:
-        print("The branch doesn't have an upstream.")
-        return
-    a, b = repo.ahead_behind(
-        branch.target,
-        branch.upstream.target,
-    )
-    if a:
-        print(
-            f"Following local commits are missing in upstream {emphasis(branch.upstream.branch_name)}:"
-        )
-        for commit in last_commits(repo, branch.target, a):
-            print(inactive(f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"))
-    if b:
-        print(
-            f"Following upstream commits are missing in local {emphasis(branch.branch_name)}:"
-        )
-        for commit in last_commits(repo, branch.upstream.target, b):
-            print(inactive(f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"))
-
-
-# endregion git
 
 
 # region commands
@@ -485,12 +44,14 @@ def ls(args: Args):
     checked_out = get_current_branch(repo).branch_name
     parent_prefix: list[str] = []
 
-    gh = get_GH(repo, stack, args.offline)
+    gh = initGH(repo, stack, args.offline)
 
     for record in stack.traverse():
         parent_prefix = parent_prefix[: record.depth - 1]
         current = record.branch_name == checked_out
-        last_child = record.index == record.parent.children - 1 if record.parent else False
+        last_child = (
+            record.index == record.parent.children - 1 if record.parent else False
+        )
 
         line = _print_line(
             repo, current, parent_prefix, record.parent, record.branch_name, last_child
@@ -502,7 +63,9 @@ def ls(args: Args):
 
         print(" ".join(line))
         if record.parent:
-            parent_prefix.append("  " if record.index == record.parent.children - 1 else "│ ")
+            parent_prefix.append(
+                "  " if record.index == record.parent.children - 1 else "│ "
+            )
 
 
 def _print_line(
@@ -545,7 +108,9 @@ def _print_line(
                 branch.upstream.target,
             )
             if a or b:
-                line.append(with_style("dim", "↕" if a and b else "↑" if a else "↓"))
+                line.append(
+                    with_style("dim", "↕" if a and b else "↑" if a else "↓")
+                )
         else:
             line.append(line_color("*"))
 
@@ -642,7 +207,11 @@ def restack(args: Args):
         )
 
         for commit in last_commits(repo, parent_ref.target, a):
-            print(inactive(f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"))
+            print(
+                inactive(
+                    f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"
+                )
+            )
 
         print(f"  Run `git rebase -i {parent.branch_name} {record.branch_name}`.")
 
@@ -652,7 +221,7 @@ def pr_sync(args: Args):
     if repo.is_empty:
         return
 
-    gh = get_GH(repo, stack, args.offline)
+    gh = initGH(repo, stack, args.offline)
     if gh is None:
         return
     for record in stack.traverse():
@@ -722,7 +291,7 @@ def update_upstream(repo: git.Repository, origin: git.Remote, branch: git.Branch
 
 def update_pr(args: Args):
     repo, stack = connect(args)
-    gh = get_GH(repo, stack, args.offline)
+    gh = initGH(repo, stack, args.offline)
     if gh is None:
         return
     origin = repo.remotes["origin"]
