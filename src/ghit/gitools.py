@@ -1,12 +1,18 @@
 from collections.abc import Iterator
 import pygit2 as git
-from .stack import *
 from .styling import *
 
 
 def get_git_ssh_credentials() -> git.credentials.KeypairFromAgent:
     return git.KeypairFromAgent("git")
 
+class MyRemoteCallback(git.RemoteCallbacks):
+    def push_update_reference(self, refname, message):
+        self.message = message
+        self.refname = refname
+
+    def credentials(self, url, username_from_url, allowed_types):
+        return get_git_ssh_credentials()
 
 def get_default_branch(repo: git.Repository) -> str:
     remote_head = repo.references["refs/remotes/origin/HEAD"].resolve().shorthand
@@ -28,7 +34,7 @@ def last_commits(
             break
 
 
-def checkout(repo: git.Repository, parent: StackRecord, branch_name: str | None):
+def checkout(repo: git.Repository, parent_name: str, branch_name: str | None):
     if branch_name is None:
         return
     branch = repo.branches.get(branch_name)
@@ -37,11 +43,11 @@ def checkout(repo: git.Repository, parent: StackRecord, branch_name: str | None)
         return
     repo.checkout(branch)
     print(f"Checked-out {emphasis(branch_name)}.")
-    if parent is not None:
-        parent_branch = repo.branches[parent.branch_name]
+    if parent_name:
+        parent_branch = repo.branches[parent_name]
         a, _ = repo.ahead_behind(parent_branch.target, branch.target)
         if a:
-            print(f"This branch has fallen back behind {emphasis(parent.branch_name)}.")
+            print(f"This branch has fallen back behind {emphasis(parent_name)}.")
             print("You may want to restack to pick up the following commits:")
             for commit in last_commits(repo, parent_branch.target, a):
                 print(
