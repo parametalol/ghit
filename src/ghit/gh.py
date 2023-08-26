@@ -98,9 +98,7 @@ def pr_number_with_style(pr: PR) -> str:
     if pr.locked:
         line.append("🔒")
     style = lambda m: with_style("dim", pr_state_style[pr_state(pr)](m))
-    if pr.draft:
-        line.append(style("draft"))
-    line.append(style(f"#{pr.number}"))
+    line.append(style(f"#{pr.number} ({pr_state(pr)})"))
     return " ".join(line)
 
 
@@ -406,12 +404,12 @@ class GH:
             nr = self.not_resolved(pr)
             if not args.verbose and nr:
                 line.append(warning("!"))
-            approved = [r for r in pr.reviews if r.state == "APPROVED"]
-            if not args.verbose and approved:
-                line.append(good("✓"))
             cr = [r for r in pr.reviews if r.state and r.state == "CHANGES_REQUESTED"]
             if not args.verbose and cr:
                 line.append(danger("✗"))
+            approved = [r for r in pr.reviews if r.state == "APPROVED"]
+            if not args.verbose and not cr and approved:
+                line.append(good("✓"))
             sync = self.is_sync(pr, record)
             if not args.verbose and not sync:
                 line.append(warning("⟳"))
@@ -419,9 +417,13 @@ class GH:
             line.append(pr_title_with_style(pr))
             lines.append("".join(line))
             if args.verbose:
-                vlines =[]
+                vlines = []
                 for r in approved:
-                    vlines.append(with_style("dim", good(f"✓ Approved by {with_style('italic', str(r.author))}")))
+                    vlines.append(
+                        with_style("dim", good("✓ Approved by "))
+                        + with_style("italic", good(str(r.author)))
+                        + with_style("dim", good(".")),
+                    )
 
                 if not sync:
                     for p in self.prs[record.branch_name]:
@@ -439,25 +441,24 @@ class GH:
                                 )
                 if nr:
                     for thread in nr:
-                        vlines.append(
-                            with_style(
-                                "dim",
-                                warning(
-                                    f"! No reaction for {with_style('underlined', thread.path)}:"
-                                ),
-                            )
-                        )
                         for c in thread.comments:
                             vlines.append(
-                                f"  {warning('•')} {with_style('italic', str(c.author))}: {colorful(c.url)}"
+                                with_style(
+                                    "dim", warning("! No reaction to a comment by ")
+                                )
+                                + with_style("italic", warning(str(c.author)))
+                                + with_style("dim", warning(":")),
                             )
+                            vlines.append(f"  {colorful(c.url)}")
                 if cr:
-                    vlines.append(with_style("dim", danger("✗ Changes requested by:")))
                     for review in cr:
                         vlines.append(
-                            f"  {danger('•')} {with_style('italic', str(review.author))}: {colorful(review.url)}"
+                            with_style("dim", danger("✗ Changes requested by "))
+                            + with_style("italic", danger(str(review.author)))
+                            + with_style("dim", danger(":")),
                         )
-                lines.extend("  " + l for l in vlines)
+                        vlines.append(f"  {colorful(review.url)}")
+                lines.extend(vlines)
 
         return lines
 
