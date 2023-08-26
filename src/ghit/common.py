@@ -1,18 +1,9 @@
-from dataclasses import dataclass
 import pygit2 as git
 from .stack import *
 from .gitools import *
 from .styling import *
 from .gh import initGH, GH
-
-@dataclass
-class Args:
-    stack: str
-    repository: str
-    offline: bool
-    title: str
-    debug: bool
-
+from .args import Args
 
 def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
     repo = git.Repository(args.repository)

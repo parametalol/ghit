@@ -34,15 +34,13 @@ def last_commits(
             break
 
 
-def checkout(repo: git.Repository, parent_name: str, branch_name: str | None):
-    if branch_name is None:
-        return
-    branch = repo.branches.get(branch_name)
+def checkout(repo: git.Repository, parent_name: str | None, branch_name: str | None):
+    branch = repo.branches.get(branch_name) if branch_name else None
     if not branch:
         print(danger("Error:"), emphasis(branch_name), danger("not found in local."))
         return
     repo.checkout(branch)
-    print(f"Checked-out {emphasis(branch_name)}.")
+    print(f"Checked-out {emphasis(branch.branch_name)}.")
     if parent_name:
         parent_branch = repo.branches[parent_name]
         a, _ = repo.ahead_behind(parent_branch.target, branch.target)

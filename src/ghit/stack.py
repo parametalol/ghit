@@ -38,7 +38,7 @@ class Stack:
     def is_empty(self) -> bool:
         return len(self._stack) == 0
 
-    def traverse(
+    def _traverse(
         self, parent: StackRecord = None, depth: int = 0
     ) -> Iterator[StackRecord]:
         i = 0
@@ -47,7 +47,24 @@ class Stack:
             yield current
             i += 1
             if not substack.is_empty():
-                yield from substack.traverse(current, depth + 1)
+                yield from substack._traverse(current, depth + 1)
+
+    def traverse(self) -> Iterator[StackRecord]:
+        yield from self._traverse()
+
+    def _find_depth(self)->int:
+        depth = 0
+        for record in self.traverse():
+            depth = max(depth, record.depth)
+        return depth
+    
+    def rtraverse(self) -> Iterator[StackRecord]:
+        depth = self._find_depth()
+        while depth:
+            for record in self.traverse():
+                if record.depth == depth:
+                    yield record
+            depth -= 1
 
 
 def open_stack(filename: str) -> Stack | None:

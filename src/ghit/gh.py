@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import requests
 import os
 import subprocess
@@ -7,6 +8,7 @@ from urllib.parse import urlparse
 from urllib.parse import ParseResult
 from .styling import *
 from .stack import *
+from .args import Args
 
 GH_SCHEME = "git@github.com:"
 
@@ -14,7 +16,66 @@ GH_TEMPLATES = [".github", "docs", ""]
 
 COMMENT_FIRST_LINE = "Current dependencies on/for this PR:"
 
-pr_cache = dict[str, list[any]]()
+
+@dataclass
+class Author:
+    login: str
+    name: str | None
+
+    def __str__(self) -> str:
+        if self.name and self.login:
+            return f"{self.name} ({self.login})"
+        return self.name or self.login
+
+
+@dataclass
+class Reaction:
+    content: str
+    author: Author
+
+
+@dataclass
+class Comment:
+    author: Author
+    body: str
+    reacted: bool
+    url: str
+    reactions: list[Reaction]
+
+
+@dataclass
+class CodeThread:
+    path: str
+    resolved: bool
+    outdated: bool
+    comments: list[Comment]
+
+
+@dataclass
+class Review:
+    author: Author
+    state: str
+    url: str
+
+
+@dataclass
+class PR:
+    number: int
+    author: Author
+    title: str
+    state: str
+    closed: bool
+    merged: bool
+    locked: bool
+    draft: bool
+    base: str
+    head: str
+    threads: list[CodeThread]
+    comments: list[Comment]
+    reviews: list[Review]
+
+
+# region style
 
 pr_state_style = {
     "OPEN": good,
@@ -24,32 +85,194 @@ pr_state_style = {
 }
 
 
-def pr_state(pr) -> str:
-    if pr["draft"]:
+def pr_state(pr: PR) -> str:
+    if pr.draft:
         return "DRAFT"
-    if pr["merged_at"]:
+    if pr.merged:
         return "MERGED"
-    return str(pr["state"]).upper()
+    return str(pr.state).upper()
 
 
-def pr_number_with_style(pr: any) -> str:
+def pr_number_with_style(pr: PR) -> str:
     line: list[str] = []
-    if pr["locked"]:
+    if pr.locked:
         line.append("🔒")
     style = lambda m: with_style("dim", pr_state_style[pr_state(pr)](m))
-    if pr["draft"]:
+    if pr.draft:
         line.append(style("draft"))
-    line.append(style(f'#{pr["number"]}'))
+    line.append(style(f"#{pr.number}"))
     return " ".join(line)
 
 
-def pr_title_with_style(pr: any) -> str:
+def pr_title_with_style(pr: PR) -> str:
     style = lambda m: with_style("dim", pr_state_style[pr_state(pr)](m))
-    return style(pr["title"])
+    return style(pr.title)
 
 
-def pr_with_style(pr: any) -> str:
+def pr_with_style(pr: PR) -> str:
     return pr_number_with_style(pr) + " " + pr_title_with_style(pr)
+
+
+# endregion style
+
+# region query
+GQL_QUERY = "query searh_prs"
+GQL_SEARCH = """
+    search(
+        query: "repo:{owner}/{repository} is:pr {heads}"
+        type: ISSUE
+        first: 10
+    )
+"""
+
+GQL_FIELDS = """
+edges {
+    node {
+    ... on PullRequest {
+        number
+        title
+        author {
+            login
+            ... on User {
+                name
+            }
+        }
+        baseRefName
+        headRefName
+        isDraft
+        locked
+        closed
+        merged
+        state
+
+        comments(first: 10) {
+            nodes {
+                author {
+                    login
+                    ... on User {
+                        name
+                    }
+                }
+                url
+                body
+                minimizedReason
+                reactions(last: 10) {
+                    nodes {
+                        content
+                        user {
+                            login
+                            name
+                        }
+                    }
+                }
+            }
+        }
+
+        reviewThreads(last: 10) {
+            nodes {
+                path
+                isResolved
+                isOutdated
+                comments(last: 1) {
+                    nodes {
+                        path
+                        url
+                        author {
+                            login
+                            ... on User {
+                                name
+                            }
+                        }
+                        body
+                        reactions(last: 10) {
+                            nodes {
+                                content
+                                user {
+                                    login
+                                    name
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        reviews(last: 10) {
+            nodes {
+                state
+                url
+                author {
+                    login
+                    ... on User {
+                        name
+                    }
+                }
+            }
+        }
+    } }
+}
+"""
+
+
+def _make_author(node: any) -> Author:
+    return Author(
+        login=node["login"],
+        name=node["name"] if "name" in node else None,
+    )
+
+
+def _make_reaction(node: any) -> Reaction:
+    return Reaction(
+        content=node["content"],
+        author=_make_author(node["user"]),
+    )
+
+
+def _make_comment(node: any) -> Comment:
+    return Comment(
+        author=_make_author(node["author"]),
+        body=node["body"],
+        reacted=False,
+        url=node["url"],
+        reactions=[_make_reaction(reaction) for reaction in node["reactions"]["nodes"]],
+    )
+
+
+def _make_review(node: any) -> Review:
+    return Review(
+        author=_make_author(node["author"]), state=node["state"], url=node["url"]
+    )
+
+
+def _make_thread(node: any) -> CodeThread:
+    return CodeThread(
+        path=node["path"],
+        resolved=node["isResolved"],
+        outdated=node["isOutdated"],
+        comments=[_make_comment(comment) for comment in node["comments"]["nodes"]],
+    )
+
+
+def _make_pr(node: any) -> PR:
+    return PR(
+        number=node["number"],
+        author=_make_author(node["author"]),
+        title=node["title"],
+        draft=node["isDraft"],
+        locked=node["locked"],
+        closed=node["closed"],
+        merged=node["merged"],
+        state=node["state"],
+        base=node["baseRefName"],
+        head=node["headRefName"],
+        comments=[_make_comment(n) for n in node["comments"]["nodes"]],
+        threads=[_make_thread(n) for n in node["reviewThreads"]["nodes"]],
+        reviews=[_make_review(n) for n in node["reviews"]["nodes"]],
+    )
+
+
+# endregion query
 
 
 def get_gh_owner_repository(url: ParseResult) -> (str, str):
@@ -90,8 +313,19 @@ def is_gh(repo: git.Repository) -> bool:
     return url.netloc.find("github.com") >= 0
 
 
-def is_sync(pr: any, branch: git.Branch) -> bool:
-    return not branch or pr["head"]["sha"] == branch.target.hex
+def _graphql(token: str, query: str) -> any:
+    response = requests.post(
+        url=f"https://api.github.com/graphql",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github.v3+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        json={"query": query},
+    )
+    if not response.ok:
+        raise BaseException(response.text)
+    return response.json()
 
 
 class GH:
@@ -107,6 +341,7 @@ class GH:
             if os.path.exists(filename):
                 self.template = open(filename).read()
                 break
+        self.prs = self._search_stack_prs()
 
     def _call(
         self,
@@ -114,7 +349,7 @@ class GH:
         params: dict[str, str] = {},
         body: any = None,
         method: str = "GET",
-    ) -> str:
+    ) -> any:
         response = requests.request(
             method,
             url=f"https://api.github.com/repos/{self.owner}/{self.repository}/{endpoint}",
@@ -130,56 +365,153 @@ class GH:
             raise BaseException(response.text)
         return response.json()
 
-    def find_PRs(self, branch: str) -> list[any]:
-        if branch not in pr_cache:
-            logging.debug(f"branch {branch} not in cache")
-            pr = self._call("pulls", {"head": f"{self.owner}:{branch}", "state": "all"})
-            logging.debug(f"gh found prs: {len(pr)}")
-            pr_cache[branch] = pr
-        return pr_cache[branch]
+    def is_sync(self, remote_pr: PR, record: StackRecord) -> bool:
+        for pr in self.prs[record.branch_name]:
+            if pr.number == remote_pr.number:
+                if remote_pr.base != record.parent.branch_name:
+                    logging.debug(
+                        f"remote PR base doesn't match: {remote_pr.base} vs {record.parent.branch_name}"
+                    )
+                    return False
+        return True
 
-    def pr_info(self, branch_name: str) -> str | None:
-        prs = self.find_PRs(branch_name)
-        branch = self.repo.branches.get(branch_name)
+    def not_resolved(self, pr: PR) -> list[CodeThread]:
+        result = [thread for thread in pr.threads if not thread.resolved]
+        if result:
+            logging.debug(f"Not resolved: {[r.resolved for r in result]}")
 
-        if len(prs) == 1:
-            if is_sync(prs[0], branch):
-                return warning("⟳") + pr_with_style(prs[0])
-            return pr_with_style(prs[0])
-        return ", ".join(
-            (
-                warning("⟳") + pr_number_with_style(pr)
-                if is_sync(prs[0], branch)
-                else pr_number_with_style(pr)
+        def author_reacted(thread: CodeThread) -> bool:
+            if not thread.comments:
+                return False
+            for reaction in thread.comments[-1].reactions:
+                if reaction.author.login == pr.author.login:
+                    return True
+            return False
+
+        def author_commented(thread: CodeThread) -> bool:
+            return (
+                thread.comments and thread.comments[-1].author.login == pr.author.login
             )
-            for pr in prs
+
+        return list(
+            filter(
+                lambda cd: not author_commented(cd) and not author_reacted(cd), result
+            )
         )
 
-    def _find_comment(self, pr: int) -> any:
-        comments = self._call(f"issues/{pr}/comments")
-        for comment in comments:
-            if str(comment["body"]).startswith(COMMENT_FIRST_LINE):
+    def pr_info(self, args: Args, record: StackRecord) -> list[str]:
+        lines: list[str] = []
+        for pr in self.prs[record.branch_name]:
+            line = [pr_number_with_style(pr)]
+            nr = self.not_resolved(pr)
+            if not args.verbose and nr:
+                line.append(warning("!"))
+            approved = [r for r in pr.reviews if r.state == "APPROVED"]
+            if not args.verbose and approved:
+                line.append(good("✓"))
+            cr = [r for r in pr.reviews if r.state and r.state == "CHANGES_REQUESTED"]
+            if not args.verbose and cr:
+                line.append(danger("✗"))
+            sync = self.is_sync(pr, record)
+            if not args.verbose and not sync:
+                line.append(warning("⟳"))
+            line.append(" ")
+            line.append(pr_title_with_style(pr))
+            lines.append("".join(line))
+            if args.verbose:
+                vlines =[]
+                for r in approved:
+                    vlines.append(with_style("dim", good(f"✓ Approved by {with_style('italic', str(r.author))}")))
+
+                if not sync:
+                    for p in self.prs[record.branch_name]:
+                        if p.number == pr.number:
+                            if p.base != record.parent.branch_name:
+                                vlines.append(
+                                    with_style(
+                                        "dim",
+                                        warning("⟳ PR base ")
+                                        + emphasis(p.base)
+                                        + warning(" doesn't match branch parent ")
+                                        + emphasis(record.parent.branch_name)
+                                        + warning("."),
+                                    )
+                                )
+                if nr:
+                    for thread in nr:
+                        vlines.append(
+                            with_style(
+                                "dim",
+                                warning(
+                                    f"! No reaction for {with_style('underlined', thread.path)}:"
+                                ),
+                            )
+                        )
+                        for c in thread.comments:
+                            vlines.append(
+                                f"  {warning('•')} {with_style('italic', str(c.author))}: {colorful(c.url)}"
+                            )
+                if cr:
+                    vlines.append(with_style("dim", danger("✗ Changes requested by:")))
+                    for review in cr:
+                        vlines.append(
+                            f"  {danger('•')} {with_style('italic', str(review.author))}: {colorful(review.url)}"
+                        )
+                lines.extend("  " + l for l in vlines)
+
+        return lines
+
+    def _find_stack_comment(self, pr: PR) -> any:
+        for comment in pr.comments:
+            if comment.body.startswith(COMMENT_FIRST_LINE):
                 return comment
         return None
 
-    def _make_comment(self, current_pr_number: int) -> str:
+    def _make_stack_comment(self, remote_pr: PR) -> str:
         md = [COMMENT_FIRST_LINE, ""]
         for record in self.stack.traverse():
-            prs = self.find_PRs(record.branch_name)
+            prs = self.prs[record.branch_name]
             if prs is not None and len(prs) > 0:
                 for pr in prs:
-                    line = "  " * record.depth + f"* **PR #{pr['number']}**"
-                    if pr["number"] == current_pr_number:
+                    line = "  " * record.depth + f"* **PR #{pr.number}**"
+                    if pr.number == remote_pr.number:
                         line += " 👈"
                     md.append(line)
             else:
                 md.append("  " * record.depth + f"* {record.branch_name}")
         return "\n".join(md)
 
+    def _search_stack_prs(self) -> dict[str, list[PR]]:
+        heads = " ".join(
+            f"head:{record.branch_name}"
+            for record in self.stack.traverse()
+            if record.parent
+        )
+        search = GQL_SEARCH.format(
+            owner=self.owner, repository=self.repository, heads=heads
+        )
+        query = f"{GQL_QUERY} {{ {search} {{ {GQL_FIELDS} }} }}"
+        response = _graphql(self.token, query)
+        logging.debug(response)
+
+        prs = dict[str, list[PR]]()
+        for record in self.stack.traverse():
+            if not record.parent:
+                prs[record.branch_name] = []
+
+        for edge in response["data"]["search"]["edges"]:
+            pr_node = edge["node"]
+            pr = _make_pr(pr_node)
+            if pr.head not in prs:
+                prs.update({pr.head: [pr]})
+            else:
+                prs[pr.head].append(pr)
+        return prs
+
     def comment(self, branch: git.Branch, new: bool = False):
-        for pr in self.find_PRs(branch.branch_name):
-            comment = self._find_comment(pr["number"]) if not new else None
-            md = self._make_comment(pr["number"])
+        for pr in self.prs[branch.branch_name]:
+            comment = self._find_stack_comment(pr) if not new else None
+            md = self._make_stack_comment(pr)
             if comment is not None:
                 if comment["body"] == md:
                     continue
@@ -192,7 +524,7 @@ class GH:
                 print(f"Updated comment in {pr_number_with_style(branch, pr)}.")
             else:
                 self._call(
-                    f"issues/{pr['number']}/comments",
+                    f"issues/{pr.number}/comments",
                     None,
                     {"body": md},
                     "POST",
@@ -211,10 +543,10 @@ class GH:
                 "draft": True,
             },
         )
-        if branch_name in pr_cache:
-            pr_cache[branch_name].append(pr)
+        if branch_name in self.prs:
+            self.prs[branch_name].append(pr)
         else:
-            pr_cache[branch_name] = [pr]
+            self.prs.update({branch_name: [pr]})
         branch = self.repo.lookup_branch(branch_name)
         print("Created draft PR ", pr_number_with_style(branch, pr), ".", sep="")
         self.comment(branch, True)
