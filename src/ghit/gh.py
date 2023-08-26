@@ -119,12 +119,14 @@ GQL_SEARCH = """
     search(
         query: "repo:{owner}/{repository} is:pr {heads}"
         type: ISSUE
-        first: 10
+        first: 20
+        after: {cursor}
     )
 """
 
 GQL_FIELDS = """
 edges {
+    cursor
     node {
     ... on PullRequest {
         number
@@ -375,8 +377,6 @@ class GH:
 
     def not_resolved(self, pr: PR) -> list[CodeThread]:
         result = [thread for thread in pr.threads if not thread.resolved]
-        if result:
-            logging.debug(f"Not resolved: {[r.resolved for r in result]}")
 
         def author_reacted(thread: CodeThread) -> bool:
             if not thread.comments:
@@ -483,30 +483,42 @@ class GH:
         return "\n".join(md)
 
     def _search_stack_prs(self) -> dict[str, list[PR]]:
-        heads = " ".join(
-            f"head:{record.branch_name}"
-            for record in self.stack.traverse()
-            if record.parent
-        )
-        search = GQL_SEARCH.format(
-            owner=self.owner, repository=self.repository, heads=heads
-        )
-        query = f"{GQL_QUERY} {{ {search} {{ {GQL_FIELDS} }} }}"
-        response = _graphql(self.token, query)
-        logging.debug(response)
-
         prs = dict[str, list[PR]]()
         for record in self.stack.traverse():
             if not record.parent:
                 prs[record.branch_name] = []
 
-        for edge in response["data"]["search"]["edges"]:
-            pr_node = edge["node"]
-            pr = _make_pr(pr_node)
-            if pr.head not in prs:
-                prs.update({pr.head: [pr]})
-            else:
-                prs[pr.head].append(pr)
+        heads = " ".join(
+            f"head:{record.branch_name}"
+            for record in self.stack.traverse()
+            if record.parent
+        )
+
+        def do(cursor: str):
+            search = GQL_SEARCH.format(
+                owner=self.owner, repository=self.repository, heads=heads, cursor=cursor
+            )
+
+            query = f"{GQL_QUERY} {{ {search} {{ {GQL_FIELDS} }} }}"
+            response = _graphql(self.token, query)
+            edges = response["data"]["search"]["edges"]
+            for edge in edges:
+                pr_node = edge["node"]
+                pr = _make_pr(pr_node)
+                if pr.head not in prs:
+                    prs.update({pr.head: [pr]})
+                else:
+                    prs[pr.head].append(pr)
+            return edges
+
+        cursor = "null"
+        while True:
+            edges = do(cursor)
+            if not edges:
+                logging.debug("Query done.")
+                break
+            cursor = '"'+edges[-1]["cursor"]+'"'
+            logging.debug(f"Next cursor: {cursor}")
         return prs
 
     def comment(self, branch: git.Branch, new: bool = False):
