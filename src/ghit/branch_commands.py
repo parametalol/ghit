@@ -1,7 +1,7 @@
 from .common import *
 
 
-def update_pr(args: Args):
+def branch_sync(args: Args):
     repo, stack, gh = connect(args)
     if gh is None:
         return
@@ -12,7 +12,7 @@ def update_pr(args: Args):
     current = get_current_branch(repo)
     for record in stack.traverse():
         if record.branch_name == current.branch_name:
-            sync_branch(args, repo, gh, origin, record)
+            sync_branch(repo, gh, origin, record, args.title, args.draft)
             break
     else:
         print(warning("Couldn't find current branch in the stack."))

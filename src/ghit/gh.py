@@ -1,4 +1,3 @@
-import requests
 import os
 import json
 import subprocess
@@ -108,17 +107,19 @@ class GH:
             if os.path.exists(filename):
                 self.template = open(filename).read()
                 break
-        self.prs = self._search_stack_prs()
+        self.__prs = None
 
     def getPRs(self, branch_name: str) -> list[PR]:
-        return self.prs.get(branch_name, list[PR]())
+        if self.__prs is None:
+            self.__prs = self._search_stack_prs()
+        return self.__prs.get(branch_name, list[PR]())
 
-    def is_sync(self, remote_pr: PR, record: StackRecord) -> bool:
+    def is_sync(self, remote_pr: PR, record: Stack) -> bool:
         for pr in self.getPRs(record.branch_name):
             if pr.number == remote_pr.number:
-                if remote_pr.base != record.parent.branch_name:
+                if remote_pr.base != record.get_parent().branch_name:
                     logging.debug(
-                        f"remote PR base doesn't match: {remote_pr.base} vs {record.parent.branch_name}"
+                        f"remote PR base doesn't match: {remote_pr.base} vs {record.get_parent().branch_name}"
                     )
                     return False
         return True
@@ -145,10 +146,9 @@ class GH:
             )
         )
 
-    def pr_info(self, args: Args, record: StackRecord) -> list[str]:
+    def pr_info(self, args: Args, record: Stack) -> list[str]:
         lines: list[str] = []
         for pr in self.getPRs(record.branch_name):
-            logging.debug(f"PR id {pr.id}")
             line = [pr_number_with_style(pr)]
             nr = self.not_resolved(pr)
             if not args.verbose and nr:
@@ -177,14 +177,14 @@ class GH:
                 if not sync:
                     for p in self.getPRs(record.branch_name):
                         if p.number == pr.number:
-                            if p.base != record.parent.branch_name:
+                            if p.base != record.get_parent().branch_name:
                                 vlines.append(
                                     with_style(
                                         "dim",
                                         warning("⟳ PR base ")
                                         + emphasis(p.base)
                                         + warning(" doesn't match branch parent ")
-                                        + emphasis(record.parent.branch_name)
+                                        + emphasis(record.get_parent().branch_name)
                                         + warning("."),
                                     )
                                 )
@@ -234,13 +234,13 @@ class GH:
     def _search_stack_prs(self) -> dict[str, list[PR]]:
         prs = dict[str, list[PR]]()
         for record in self.stack.traverse():
-            if not record.parent:
+            if not record.get_parent():
                 prs[record.branch_name] = []
 
         heads = " ".join(
             f"head:{record.branch_name}"
             for record in self.stack.traverse()
-            if record.parent
+            if record.get_parent()
         )
 
         def do(cursor: str):
@@ -270,11 +270,13 @@ class GH:
             logging.debug(f"Next cursor: {cursor}")
         return prs
 
-    def comment(self, pr: PR, new: bool = False):
-        comment = self._find_stack_comment(pr) if not new else None
+    def comment(self, pr: PR):
+        logging.debug(f"commenting pr #{pr.number}")
+        comment = self._find_stack_comment(pr)
         md = self._make_stack_comment(pr)
         if comment:
             if comment.body == md:
+                logging.debug("comment is up to date")
                 return
             md = json.dumps(md, ensure_ascii=False)
             graphql(self.token, GQL_UPDATE_COMMENT.format(id=comment.id, body=md))
@@ -284,7 +286,20 @@ class GH:
             graphql(self.token, GQL_ADD_COMMENT.format(pr_id=pr.id, body=md))
             print(f"Commented {pr_number_with_style(pr)}.")
 
+    def update_pr(self, record: Stack, pr: PR):
+        base = record.get_parent().branch_name
+        if pr.base == base:
+            return
+        logging.debug(f"updating PR base from {pr.base} to {base}")
+        graphql(self.token, GQL_UPDATE_PR_BASE.format(id=pr.id, base=base))
+        pr.base = base
+        print(f"Set PR {pr_number_with_style(pr)} base branch to {emphasis(base)}.")
+
     def create_pr(self, base: str, branch_name: str, title: str = "", draft: bool = False) -> any:
+        logging.debug(f"creating PR wiht base {base} and head {branch_name}")
+        base_branch = self.repo.lookup_branch(base)
+        if not base_branch.upstream:
+            raise Exception(f"Base branch {base} has no upstream.")
         repo_id_json = graphql(
             self.token,
             GQL_GET_REPO_ID.format(owner=self.owner, repository=self.repository),
@@ -302,12 +317,12 @@ class GH:
             ),
         )
         pr = make_pr(pr_json["data"]["createPullRequest"]["pullRequest"])
-        if branch_name in self.prs:
-            self.prs[branch_name].append(pr)
+        if branch_name in self.__prs:
+            self.__prs[branch_name].append(pr)
         else:
-            self.prs.update({branch_name: [pr]})
+            self.__prs.update({branch_name: [pr]})
         print("Created draft PR ", pr_number_with_style(pr), ".", sep="")
-        self.comment(pr, True)
+        self.comment(pr)
         return pr
 
 
