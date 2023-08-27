@@ -107,7 +107,7 @@ def stack_sync(args: Args):
     print("\ttotal objects:", progress.total_objects)
 
     for record in stack.traverse(False):
-        sync_branch(args, repo, gh, origin, record)
+        sync_branch(repo, gh, origin, record)
 
 def dump(args:Args):
     _, stack, _ = connect(args)

@@ -224,10 +224,18 @@ class PR:
 # region constructors
 
 
+def _path(node: any, *keys: str)->any:
+    for k in keys:
+        if k in node:
+            node=node[k]
+        else:
+            return None
+    return node
+
 def _make_author(node: any) -> Author:
     return Author(
         login=node["login"],
-        name=node["name"] if "name" in node else None,
+        name=_path(node, "name"),
     )
 
 
@@ -245,7 +253,7 @@ def _make_comment(node: any) -> Comment:
         body=node["body"],
         reacted=False,
         url=node["url"],
-        reactions=[_make_reaction(reaction) for reaction in node["reactions"]["nodes"]],
+        reactions=[_make_reaction(reaction) for reaction in _path(node, "reactions", "nodes") or []],
     )
 
 
@@ -260,9 +268,8 @@ def _make_thread(node: any) -> CodeThread:
         path=node["path"],
         resolved=node["isResolved"],
         outdated=node["isOutdated"],
-        comments=[_make_comment(comment) for comment in node["comments"]["nodes"]],
+        comments=[_make_comment(comment) for comment in _path(node, "comments", "nodes") or []],
     )
-
 
 def make_pr(node: any) -> PR:
     return PR(
@@ -277,9 +284,9 @@ def make_pr(node: any) -> PR:
         state=node["state"],
         base=node["baseRefName"],
         head=node["headRefName"],
-        comments=[_make_comment(n) for n in node["comments"]["nodes"]],
-        threads=[_make_thread(n) for n in node["reviewThreads"]["nodes"]],
-        reviews=[_make_review(n) for n in node["reviews"]["nodes"]],
+        comments=[_make_comment(n) for n in _path(node, "comments", "nodes") or []],
+        threads=[_make_thread(n) for n in _path(node, "reviewThreads", "nodes") or []],
+        reviews=[_make_review(n) for n in _path(node, "reviews", "nodes") or []],
     )
 
 
