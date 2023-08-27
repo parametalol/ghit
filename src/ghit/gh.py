@@ -1,6 +1,6 @@
-from dataclasses import dataclass
 import requests
 import os
+import json
 import subprocess
 import logging
 import pygit2 as git
@@ -9,70 +9,13 @@ from urllib.parse import ParseResult
 from .styling import *
 from .stack import *
 from .args import Args
+from .graphql import *
 
 GH_SCHEME = "git@github.com:"
 
 GH_TEMPLATES = [".github", "docs", ""]
 
 COMMENT_FIRST_LINE = "Current dependencies on/for this PR:"
-
-
-@dataclass
-class Author:
-    login: str
-    name: str | None
-
-    def __str__(self) -> str:
-        if self.name and self.login:
-            return f"{self.name} ({self.login})"
-        return self.name or self.login
-
-
-@dataclass
-class Reaction:
-    content: str
-    author: Author
-
-
-@dataclass
-class Comment:
-    author: Author
-    body: str
-    reacted: bool
-    url: str
-    reactions: list[Reaction]
-
-
-@dataclass
-class CodeThread:
-    path: str
-    resolved: bool
-    outdated: bool
-    comments: list[Comment]
-
-
-@dataclass
-class Review:
-    author: Author
-    state: str
-    url: str
-
-
-@dataclass
-class PR:
-    number: int
-    author: Author
-    title: str
-    state: str
-    closed: bool
-    merged: bool
-    locked: bool
-    draft: bool
-    base: str
-    head: str
-    threads: list[CodeThread]
-    comments: list[Comment]
-    reviews: list[Review]
 
 
 # region style
@@ -113,167 +56,6 @@ def pr_with_style(pr: PR) -> str:
 
 # endregion style
 
-# region query
-GQL_QUERY = "query searh_prs"
-GQL_SEARCH = """
-    search(
-        query: "repo:{owner}/{repository} is:pr {heads}"
-        type: ISSUE
-        first: 20
-        after: {cursor}
-    )
-"""
-
-GQL_FIELDS = """
-edges {
-    cursor
-    node {
-    ... on PullRequest {
-        number
-        title
-        author {
-            login
-            ... on User {
-                name
-            }
-        }
-        baseRefName
-        headRefName
-        isDraft
-        locked
-        closed
-        merged
-        state
-
-        comments(first: 10) {
-            nodes {
-                author {
-                    login
-                    ... on User {
-                        name
-                    }
-                }
-                url
-                body
-                minimizedReason
-                reactions(last: 10) {
-                    nodes {
-                        content
-                        user {
-                            login
-                            name
-                        }
-                    }
-                }
-            }
-        }
-
-        reviewThreads(last: 10) {
-            nodes {
-                path
-                isResolved
-                isOutdated
-                comments(last: 1) {
-                    nodes {
-                        path
-                        url
-                        author {
-                            login
-                            ... on User {
-                                name
-                            }
-                        }
-                        body
-                        reactions(last: 10) {
-                            nodes {
-                                content
-                                user {
-                                    login
-                                    name
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        reviews(last: 10) {
-            nodes {
-                state
-                url
-                author {
-                    login
-                    ... on User {
-                        name
-                    }
-                }
-            }
-        }
-    } }
-}
-"""
-
-
-def _make_author(node: any) -> Author:
-    return Author(
-        login=node["login"],
-        name=node["name"] if "name" in node else None,
-    )
-
-
-def _make_reaction(node: any) -> Reaction:
-    return Reaction(
-        content=node["content"],
-        author=_make_author(node["user"]),
-    )
-
-
-def _make_comment(node: any) -> Comment:
-    return Comment(
-        author=_make_author(node["author"]),
-        body=node["body"],
-        reacted=False,
-        url=node["url"],
-        reactions=[_make_reaction(reaction) for reaction in node["reactions"]["nodes"]],
-    )
-
-
-def _make_review(node: any) -> Review:
-    return Review(
-        author=_make_author(node["author"]), state=node["state"], url=node["url"]
-    )
-
-
-def _make_thread(node: any) -> CodeThread:
-    return CodeThread(
-        path=node["path"],
-        resolved=node["isResolved"],
-        outdated=node["isOutdated"],
-        comments=[_make_comment(comment) for comment in node["comments"]["nodes"]],
-    )
-
-
-def _make_pr(node: any) -> PR:
-    return PR(
-        number=node["number"],
-        author=_make_author(node["author"]),
-        title=node["title"],
-        draft=node["isDraft"],
-        locked=node["locked"],
-        closed=node["closed"],
-        merged=node["merged"],
-        state=node["state"],
-        base=node["baseRefName"],
-        head=node["headRefName"],
-        comments=[_make_comment(n) for n in node["comments"]["nodes"]],
-        threads=[_make_thread(n) for n in node["reviewThreads"]["nodes"]],
-        reviews=[_make_review(n) for n in node["reviews"]["nodes"]],
-    )
-
-
-# endregion query
-
 
 def get_gh_owner_repository(url: ParseResult) -> (str, str):
     _, owner, repository = url.path.split("/", 2)
@@ -311,21 +93,6 @@ def is_gh(repo: git.Repository) -> bool:
         return False
     url = get_gh_url(repo)
     return url.netloc.find("github.com") >= 0
-
-
-def _graphql(token: str, query: str) -> any:
-    response = requests.post(
-        url=f"https://api.github.com/graphql",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github.v3+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        json={"query": query},
-    )
-    if not response.ok:
-        raise BaseException(response.text)
-    return response.json()
 
 
 class GH:
@@ -403,6 +170,7 @@ class GH:
     def pr_info(self, args: Args, record: StackRecord) -> list[str]:
         lines: list[str] = []
         for pr in self.getPRs(record.branch_name):
+            logging.debug(f"PR id {pr.id}")
             line = [pr_number_with_style(pr)]
             nr = self.not_resolved(pr)
             if not args.verbose and nr:
@@ -465,7 +233,7 @@ class GH:
 
         return lines
 
-    def _find_stack_comment(self, pr: PR) -> any:
+    def _find_stack_comment(self, pr: PR) -> Comment | None:
         for comment in pr.comments:
             if comment.body.startswith(COMMENT_FIRST_LINE):
                 return comment
@@ -475,7 +243,7 @@ class GH:
         md = [COMMENT_FIRST_LINE, ""]
         for record in self.stack.traverse():
             prs = self.getPRs(record.branch_name)
-            if prs is not None and len(prs) > 0:
+            if prs:
                 for pr in prs:
                     line = "  " * record.depth + f"* **PR #{pr.number}**"
                     if pr.number == remote_pr.number:
@@ -503,11 +271,11 @@ class GH:
             )
 
             query = f"{GQL_QUERY} {{ {search} {{ {GQL_FIELDS} }} }}"
-            response = _graphql(self.token, query)
+            response = graphql(self.token, query)
             edges = response["data"]["search"]["edges"]
             for edge in edges:
                 pr_node = edge["node"]
-                pr = _make_pr(pr_node)
+                pr = make_pr(pr_node)
                 if pr.head not in prs:
                     prs.update({pr.head: [pr]})
                 else:
@@ -528,24 +296,16 @@ class GH:
         for pr in self.getPRs(branch.branch_name):
             comment = self._find_stack_comment(pr) if not new else None
             md = self._make_stack_comment(pr)
-            if comment is not None:
-                if comment["body"] == md:
+            if comment:
+                if comment.body == md:
                     continue
-                self._call(
-                    f"issues/comments/{comment['id']}",
-                    None,
-                    {"body": md},
-                    "PATCH",
-                )
-                print(f"Updated comment in {pr_number_with_style(branch, pr)}.")
+                md = json.dumps(md, ensure_ascii=False)
+                graphql(self.token, GQL_UPDATE_COMMENT.format(id=comment.id, body=md))
+                print(f"Updated comment in {pr_number_with_style(pr)}.")
             else:
-                self._call(
-                    f"issues/{pr.number}/comments",
-                    None,
-                    {"body": md},
-                    "POST",
-                )
-                print(f"Commented {pr_number_with_style(branch, pr)}.")
+                md = json.dumps(md, ensure_ascii=False)
+                graphql(self.token, GQL_ADD_COMMENT.format(pr_id=pr.id, body=md))
+                print(f"Commented {pr_number_with_style(pr)}.")
 
     def create_pr(self, base: str, branch_name: str, title: str = "") -> any:
         pr = self._call(
@@ -564,7 +324,7 @@ class GH:
         else:
             self.prs.update({branch_name: [pr]})
         branch = self.repo.lookup_branch(branch_name)
-        print("Created draft PR ", pr_number_with_style(branch, pr), ".", sep="")
+        print("Created draft PR ", pr_number_with_style(pr), ".", sep="")
         self.comment(branch, True)
         return pr
 
