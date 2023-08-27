@@ -37,3 +37,14 @@ def update_upstream(repo: git.Repository, origin: git.Remote, branch: git.Branch
             sep="",
         )
 
+
+def sync_branch(args: Args, repo: git.Repository, gh: GH, origin: git.Remote, record: StackRecord):
+    branch = repo.branches[record.branch_name]
+    if not branch.upstream:
+        update_upstream(repo, origin, branch)
+    prs = gh.getPRs(record.branch_name)
+    if prs and not all(p.closed for p in prs):
+        for pr in prs:
+            gh.comment(pr)
+    else:
+        gh.create_pr(record.parent.branch_name, record.branch_name, args.title, args.draft)

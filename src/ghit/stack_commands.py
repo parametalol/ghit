@@ -94,11 +94,12 @@ def restack(args: Args):
 
 
 def stack_sync(args: Args):
-    repo, stack, _ = connect(args)
+    repo, stack, gh = connect(args)
     if repo.is_empty:
         return
     origin = repo.remotes["origin"]
     if not origin:
+        print(warning("No origin found for the repository."))
         return
 
     mrc = MyRemoteCallback()
@@ -111,9 +112,8 @@ def stack_sync(args: Args):
     for record in stack.traverse():
         if record.parent is None:
             continue
-        branch = repo.branches[record.branch_name]
-        if not branch.upstream:
-            update_upstream(repo, origin, branch)
+        sync_branch(args, repo, gh, origin, record)
+
 
 def get_comments(args: Args):
     repo, stack, gh = connect(args)
@@ -123,8 +123,8 @@ def get_comments(args: Args):
         pass
 
     for code_c in gh.get_code_comments():
-        print(code_c['user']['login'], "@", code_c['updated_at'])
-        print(code_c['path'])
-        for line in str(code_c['body']).splitlines():
+        print(code_c["user"]["login"], "@", code_c["updated_at"])
+        print(code_c["path"])
+        for line in str(code_c["body"]).splitlines():
             print("\t", line)
         print()
