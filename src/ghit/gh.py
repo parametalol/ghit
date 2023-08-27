@@ -107,10 +107,12 @@ class GH:
             if os.path.exists(filename):
                 self.template = open(filename).read()
                 break
-        self.prs = self._search_stack_prs()
+        self.__prs = None
 
     def getPRs(self, branch_name: str) -> list[PR]:
-        return self.prs.get(branch_name, list[PR]())
+        if self.__prs is None:
+            self.__prs = self._search_stack_prs()
+        return self.__prs.get(branch_name, list[PR]())
 
     def is_sync(self, remote_pr: PR, record: Stack) -> bool:
         for pr in self.getPRs(record.branch_name):
@@ -300,10 +302,10 @@ class GH:
             ),
         )
         pr = make_pr(pr_json["data"]["createPullRequest"]["pullRequest"])
-        if branch_name in self.prs:
-            self.prs[branch_name].append(pr)
+        if branch_name in self.__prs:
+            self.__prs[branch_name].append(pr)
         else:
-            self.prs.update({branch_name: [pr]})
+            self.__prs.update({branch_name: [pr]})
         print("Created draft PR ", pr_number_with_style(pr), ".", sep="")
         self.comment(pr, True)
         return pr
