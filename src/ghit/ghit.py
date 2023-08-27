@@ -7,7 +7,7 @@ from .gitools import *
 from .styling import *
 from .top_commands import ls, up, down, top, bottom
 from .stack_commands import check, restack, stack_sync, get_comments
-from .pr_commands import pr_sync
+from .branch_commands import branch_sync
 
 def add_top_commands(parser: argparse.ArgumentParser):
     commands = parser.add_subparsers(required=True)
@@ -49,7 +49,7 @@ def add_branch_commands(parser: argparse.ArgumentParser):
     )
     upr.add_argument("-t", "--title", help="PR title")
     upr.add_argument("-d", "--draft", help="create draft PR", action="store_true")
-    upr.set_defaults(func=pr_sync)
+    upr.set_defaults(func=branch_sync)
 
 def ghit(argv: list[str]):
     parser = argparse.ArgumentParser()
