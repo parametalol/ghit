@@ -7,7 +7,7 @@ from .gitools import *
 from .styling import *
 from .top_commands import ls, up, down, top, bottom
 from .stack_commands import check, restack, stack_sync, get_comments
-from .pr_commands import update_pr
+from .pr_commands import pr_sync
 
 def add_top_commands(parser: argparse.ArgumentParser):
     commands = parser.add_subparsers(required=True)
@@ -41,15 +41,15 @@ def add_stack_commands(parser: argparse.ArgumentParser):
         "sync", help="fetch from origin, push stack branches upstream and update PRs"
     ).set_defaults(func=stack_sync)
 
-def add_pr_commands(parser: argparse.ArgumentParser):
-    parser_pr_sub = parser.add_subparsers()
-    upr = parser_pr_sub.add_parser(
-        "update",
-        help="create new draft PR or update the existing PR opened from the current branch",
+def add_branch_commands(parser: argparse.ArgumentParser):
+    parser_branch_sub = parser.add_subparsers()
+    upr = parser_branch_sub.add_parser(
+        "sync",
+        help="push branch upstream, create a PR or update the existing PR(s)",
     )
     upr.add_argument("-t", "--title", help="PR title")
     upr.add_argument("-d", "--draft", help="create draft PR", action="store_true")
-    upr.set_defaults(func=update_pr)
+    upr.set_defaults(func=pr_sync)
 
 def ghit(argv: list[str]):
     parser = argparse.ArgumentParser()
@@ -63,7 +63,7 @@ def ghit(argv: list[str]):
 
     commands = add_top_commands(parser)
     add_stack_commands(commands.add_parser("stack", aliases=["s", "st"]))
-    add_pr_commands(commands.add_parser("pr"))
+    add_branch_commands(commands.add_parser("branch", aliases=["b", "br"]))
 
     args: Args = parser.parse_args(args=argv)
     if args.debug:

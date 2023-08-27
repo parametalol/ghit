@@ -1,7 +1,7 @@
 from .common import *
 
 
-def update_pr(args: Args):
+def pr_sync(args: Args):
     repo, stack, gh = connect(args)
     if gh is None:
         return
