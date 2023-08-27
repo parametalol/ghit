@@ -270,11 +270,13 @@ class GH:
             logging.debug(f"Next cursor: {cursor}")
         return prs
 
-    def comment(self, pr: PR, new: bool = False):
-        comment = self._find_stack_comment(pr) if not new else None
+    def comment(self, pr: PR):
+        logging.debug(f"commenting pr #{pr.number}")
+        comment = self._find_stack_comment(pr)
         md = self._make_stack_comment(pr)
         if comment:
             if comment.body == md:
+                logging.debug("comment is up to date")
                 return
             md = json.dumps(md, ensure_ascii=False)
             graphql(self.token, GQL_UPDATE_COMMENT.format(id=comment.id, body=md))
@@ -283,6 +285,15 @@ class GH:
             md = json.dumps(md, ensure_ascii=False)
             graphql(self.token, GQL_ADD_COMMENT.format(pr_id=pr.id, body=md))
             print(f"Commented {pr_number_with_style(pr)}.")
+
+    def update_pr(self, record: Stack, pr: PR):
+        base = record.get_parent().branch_name
+        if pr.base == base:
+            return
+        logging.debug(f"updating PR base from {pr.base} to {base}")
+        graphql(self.token, GQL_UPDATE_PR_BASE.format(id=pr.id, base=base))
+        pr.base = base
+        print(f"Set PR {pr_number_with_style(pr)} base branch to {emphasis(base)}.")
 
     def create_pr(self, base: str, branch_name: str, title: str = "", draft: bool = False) -> any:
         logging.debug(f"creating PR wiht base {base} and head {branch_name}")
@@ -311,7 +322,7 @@ class GH:
         else:
             self.__prs.update({branch_name: [pr]})
         print("Created draft PR ", pr_number_with_style(pr), ".", sep="")
-        self.comment(pr, True)
+        self.comment(pr)
         return pr
 
 

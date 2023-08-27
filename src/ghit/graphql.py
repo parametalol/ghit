@@ -154,6 +154,12 @@ mutation MyMutation {{
     }}
   }}
 }}"""
+
+GQL_UPDATE_PR_BASE="""mutation updatePR {{
+  updatePullRequest(input: {{pullRequestId: "{id}", baseRefName: "{base}"}}) {{
+    clientMutationId
+  }}
+}}"""
 # endregion query
 
 # region classes

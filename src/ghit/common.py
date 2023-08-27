@@ -53,5 +53,6 @@ def sync_branch(
     if prs and not all(p.closed for p in prs):
         for pr in prs:
             gh.comment(pr)
+            gh.update_pr(record, pr)
     else:
         gh.create_pr(record.get_parent().branch_name, record.branch_name, title, draft)
