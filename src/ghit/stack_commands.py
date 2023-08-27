@@ -111,5 +111,6 @@ def stack_sync(args: Args):
 
 def dump(args:Args):
     _, stack, _ = connect(args)
-    print("dumping stack:")
-    print(stack.dumps())
+    lines = []
+    stack.dumps(lines)
+    print("\n".join(lines))

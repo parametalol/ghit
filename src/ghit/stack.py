@@ -3,6 +3,7 @@ import os
 from collections.abc import Iterator
 import logging
 
+
 class Stack:
     def __init__(
         self,
@@ -17,8 +18,9 @@ class Stack:
         self._index = parent.length() if parent else 0
         self._children = dict[str, Stack]()
 
-    def get_parent(self)->Stack:
-        if self.is_root(): return None
+    def get_parent(self) -> Stack:
+        if self.is_root():
+            return None
         p = self.__parent
         return p if p._enabled else p.get_parent()
 
@@ -28,23 +30,23 @@ class Stack:
         child = Stack(branch_name, enabled, self)
         self._children.update({branch_name: child})
         return child
-    
-    def is_last_child(self)->bool:
-        return self.is_root() or self._index == self.get_parent().length() - 1 
+
+    def is_last_child(self) -> bool:
+        return self.is_root() or self._index == self.get_parent().length() - 1
 
     def length(self) -> int:
         return len(self._children)
 
-    def is_root(self)->bool:
+    def is_root(self) -> bool:
         return self.__parent is None
 
-    def first_level(self)->bool:
+    def first_level(self) -> bool:
         return not self.is_root() and not self.get_parent()
 
     def traverse(self, with_first_level: bool = True) -> Iterator[Stack]:
         if not self.is_root():
             if self._enabled and (with_first_level or not self.first_level()):
-                yield self        
+                yield self
         for r in self._children.values():
             yield from r.traverse()
 
@@ -62,13 +64,15 @@ class Stack:
                     yield record
             depth -= 1
 
-    def dumps(self) -> str:
-        lines = list[str]()
-        for record in self.traverse():
+    def dumps(self, lines: list[str] = []):
+        if not self.is_root():
             lines.append(
-                ("" if record._enabled else "#") + "." * record.depth + record.branch_name + "\n"
+                ("" if self._enabled else "#")
+                + "." * (self.depth - 1)
+                + self.branch_name
             )
-        return "".join(lines)
+        for record in self._children.values():
+            record.dumps(lines)
 
 
 def open_stack(filename: str) -> Stack | None:
@@ -86,7 +90,9 @@ def open_stack(filename: str) -> Stack | None:
             line = line.lstrip("#")
             branch_name = line.lstrip(".")
             depth = len(line) - len(branch_name)
-            logging.debug(f"parsed: {'enabled' if enabled else 'disabled'} {branch_name} {depth}.")
+            logging.debug(
+                f"parsed: {'enabled' if enabled else 'disabled'} {branch_name} {depth}."
+            )
             logging.debug(f"current parent: {parents[-1].branch_name}.")
 
             for _ in range(1, len(parents) - depth):
