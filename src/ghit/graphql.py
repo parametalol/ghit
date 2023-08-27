@@ -1,4 +1,5 @@
 import requests
+import sys
 from dataclasses import dataclass
 import logging
 
@@ -121,7 +122,38 @@ mutation UpdateComment {{
   }}
 }}"""
 
+GQL_GET_REPO_ID="""query GetRepoID {{
+  repository(owner: "{owner}", name: "{repository}") {{
+    id
+  }}
+}}"""
 
+GQL_CREATE_PR = """
+mutation MyMutation {{
+  createPullRequest(
+    input: {{ repositoryId: "{repository_id}", baseRefName: "{base}", headRefName: "{head}", title: {title}, draft: {draft}, body: {body} }}
+  ) {{
+    clientMutationId
+    pullRequest {{
+        number
+        id
+        title
+        author {{
+            login
+            ... on User {{
+                name
+            }}
+        }}
+        baseRefName
+        headRefName
+        isDraft
+        locked
+        closed
+        merged
+        state
+    }}
+  }}
+}}"""
 # endregion query
 
 # region classes
@@ -264,7 +296,13 @@ def graphql(token: str, query: str) -> any:
         },
         json={"query": query},
     )
-    logging.debug(f"response: {response}")
+    logging.debug(f"response: {response.status_code}")
     if not response.ok:
         raise BaseException(response.text)
-    return response.json()
+    result = response.json()
+    logging.debug(f"response json: {result}")
+    if "errors" in result:
+        for error in result["errors"]:
+            print(f"{error['type']}: {error['message']}", file=sys.stderr)
+        raise BaseException("errors in GraphQL response")
+    return result

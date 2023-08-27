@@ -10,4 +10,4 @@ class Args:
     title: str
     debug: bool
     verbose: bool
-
+    draft: bool
