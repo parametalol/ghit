@@ -285,6 +285,10 @@ class GH:
             print(f"Commented {pr_number_with_style(pr)}.")
 
     def create_pr(self, base: str, branch_name: str, title: str = "", draft: bool = False) -> any:
+        logging.debug(f"creating PR wiht base {base} and head {branch_name}")
+        base_branch = self.repo.lookup_branch(base)
+        if not base_branch.upstream:
+            raise Exception(f"Base branch {base} has no upstream.")
         repo_id_json = graphql(
             self.token,
             GQL_GET_REPO_ID.format(owner=self.owner, repository=self.repository),
