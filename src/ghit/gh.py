@@ -343,6 +343,9 @@ class GH:
                 break
         self.prs = self._search_stack_prs()
 
+    def getPRs(self, branch_name: str) -> list[PR]:
+        return self.prs.get(branch_name, list[PR]())
+
     def _call(
         self,
         endpoint: str,
@@ -366,7 +369,7 @@ class GH:
         return response.json()
 
     def is_sync(self, remote_pr: PR, record: StackRecord) -> bool:
-        for pr in self.prs[record.branch_name]:
+        for pr in self.getPRs(record.branch_name):
             if pr.number == remote_pr.number:
                 if remote_pr.base != record.parent.branch_name:
                     logging.debug(
@@ -399,7 +402,7 @@ class GH:
 
     def pr_info(self, args: Args, record: StackRecord) -> list[str]:
         lines: list[str] = []
-        for pr in self.prs[record.branch_name]:
+        for pr in self.getPRs(record.branch_name):
             line = [pr_number_with_style(pr)]
             nr = self.not_resolved(pr)
             if not args.verbose and nr:
@@ -426,7 +429,7 @@ class GH:
                     )
 
                 if not sync:
-                    for p in self.prs[record.branch_name]:
+                    for p in self.getPRs(record.branch_name):
                         if p.number == pr.number:
                             if p.base != record.parent.branch_name:
                                 vlines.append(
@@ -471,7 +474,7 @@ class GH:
     def _make_stack_comment(self, remote_pr: PR) -> str:
         md = [COMMENT_FIRST_LINE, ""]
         for record in self.stack.traverse():
-            prs = self.prs[record.branch_name]
+            prs = self.getPRs(record.branch_name)
             if prs is not None and len(prs) > 0:
                 for pr in prs:
                     line = "  " * record.depth + f"* **PR #{pr.number}**"
@@ -517,12 +520,12 @@ class GH:
             if not edges:
                 logging.debug("Query done.")
                 break
-            cursor = '"'+edges[-1]["cursor"]+'"'
+            cursor = '"' + edges[-1]["cursor"] + '"'
             logging.debug(f"Next cursor: {cursor}")
         return prs
 
     def comment(self, branch: git.Branch, new: bool = False):
-        for pr in self.prs[branch.branch_name]:
+        for pr in self.getPRs(branch.branch_name):
             comment = self._find_stack_comment(pr) if not new else None
             md = self._make_stack_comment(pr)
             if comment is not None:
