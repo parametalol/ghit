@@ -43,7 +43,7 @@ def sync_branch(args: Args, repo: git.Repository, gh: GH, origin: git.Remote, re
     if not branch.upstream:
         update_upstream(repo, origin, branch)
     prs = gh.getPRs(record.branch_name)
-    if prs:
+    if prs and not all(p.closed for p in prs):
         for pr in prs:
             gh.comment(pr)
     else:
