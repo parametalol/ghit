@@ -301,7 +301,7 @@ class GH:
                 body=json.dumps(self.template, ensure_ascii=False),
             ),
         )
-        pr = make_pr(pr_json["data"]["pullRequest"])
+        pr = make_pr(pr_json["data"]["createPullRequest"]["pullRequest"])
         if branch_name in self.prs:
             self.prs[branch_name].append(pr)
         else:
