@@ -6,7 +6,7 @@ from .common import *
 from .gitools import *
 from .styling import *
 from .top_commands import ls, up, down, top, bottom
-from .stack_commands import check, restack, stack_sync, get_comments
+from .stack_commands import check, restack, stack_sync, dump
 from .branch_commands import branch_sync
 
 def add_top_commands(parser: argparse.ArgumentParser):
@@ -32,7 +32,7 @@ def add_top_commands(parser: argparse.ArgumentParser):
 def add_stack_commands(parser: argparse.ArgumentParser):
     parser_stack_sub = parser.add_subparsers()
     parser_stack_sub.add_parser("check").set_defaults(func=check)
-    parser_stack_sub.add_parser("comments").set_defaults(func=get_comments)
+    parser_stack_sub.add_parser("dump").set_defaults(func=dump)
     parser_stack_sub.add_parser(
         "restack",
         help="suggest git commands to rebase the branches according to the stack",

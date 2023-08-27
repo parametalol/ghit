@@ -1,78 +1,96 @@
+from __future__ import annotations
 import os
 from collections.abc import Iterator
-
-
-class StackRecord:
-    def __init__(
-        self,
-        parent: any,
-        branch_name: str | None,
-        depth: int,
-        children: int,
-        index: int,
-    ):
-        self.parent: StackRecord | None = parent
-        self.branch_name = branch_name
-        self.depth = depth
-        self.children = children
-        self.index = index
-
+import logging
 
 class Stack:
-    def __init__(self) -> None:
-        self._stack: dict[str, Stack] = {}
+    def __init__(
+        self,
+        branch_name: str | None = None,
+        enabled: bool = False,
+        parent: Stack | None = None,
+    ):
+        self.branch_name = branch_name
+        self.__parent = parent
+        self._enabled = enabled
+        self.depth = parent.depth + 1 if parent else 0
+        self._index = parent.length() if parent else 0
+        self._children = dict[str, Stack]()
 
-    def add_child(self, parents: list[str], child: str):
-        if child.startswith("#"):
-            return
-        branch = child.lstrip(".")
-        depth = len(child) - len(branch)
-        for _ in range(0, len(parents) - depth):
-            parents.pop()
-        parents.append(branch)
-        s = self
-        for p in range(0, depth):
-            s = s._stack[parents[p]]
-        s._stack[branch] = Stack()
+    def get_parent(self)->Stack:
+        if self.is_root(): return None
+        p = self.__parent
+        return p if p._enabled else p.get_parent()
 
-    def is_empty(self) -> bool:
-        return len(self._stack) == 0
+    def add_child(self, branch_name: str, enabled: bool = True) -> Stack:
+        if branch_name in self._children:
+            raise Exception(f"'{branch_name}' already exist in '{self.branch_name}'")
+        child = Stack(branch_name, enabled, self)
+        self._children.update({branch_name: child})
+        return child
+    
+    def is_last_child(self)->bool:
+        return self.is_root() or self._index == self.get_parent().length() - 1 
 
-    def _traverse(
-        self, parent: StackRecord = None, depth: int = 0
-    ) -> Iterator[StackRecord]:
-        i = 0
-        for branch_name, substack in self._stack.items():
-            current = StackRecord(parent, branch_name, depth, len(substack._stack), i)
-            yield current
-            i += 1
-            if not substack.is_empty():
-                yield from substack._traverse(current, depth + 1)
+    def length(self) -> int:
+        return len(self._children)
 
-    def traverse(self) -> Iterator[StackRecord]:
-        yield from self._traverse()
+    def is_root(self)->bool:
+        return self.__parent is None
 
-    def _find_depth(self)->int:
+    def first_level(self)->bool:
+        return not self.is_root() and not self.get_parent()
+
+    def traverse(self, with_first_level: bool = True) -> Iterator[Stack]:
+        if not self.is_root():
+            if self._enabled and (with_first_level or not self.first_level()):
+                yield self        
+        for r in self._children.values():
+            yield from r.traverse()
+
+    def _find_depth(self) -> int:
         depth = 0
         for record in self.traverse():
             depth = max(depth, record.depth)
         return depth
-    
-    def rtraverse(self) -> Iterator[StackRecord]:
+
+    def rtraverse(self, with_first_level: bool = True) -> Iterator[Stack]:
         depth = self._find_depth()
         while depth:
-            for record in self.traverse():
+            for record in self.traverse(with_first_level):
                 if record.depth == depth:
                     yield record
             depth -= 1
+
+    def dumps(self) -> str:
+        lines = list[str]()
+        for record in self.traverse():
+            lines.append(
+                ("" if record._enabled else "#") + "." * record.depth + record.branch_name + "\n"
+            )
+        return "".join(lines)
 
 
 def open_stack(filename: str) -> Stack | None:
     if not os.path.isfile(filename):
         return None
     stack = Stack()
-    parents = list[str]()
+    parents = [stack]
     with open(filename) as f:
         for line in f.readlines():
-            stack.add_child(parents, line.rstrip())
+            line = line.rstrip()
+            logging.debug(f"reading line {line}")
+            logging.debug(f"parents: {[p.branch_name for p in parents]}")
+
+            enabled = not line.startswith("#")
+            line = line.lstrip("#")
+            branch_name = line.lstrip(".")
+            depth = len(line) - len(branch_name)
+            logging.debug(f"parsed: {'enabled' if enabled else 'disabled'} {branch_name} {depth}.")
+            logging.debug(f"current parent: {parents[-1].branch_name}.")
+
+            for _ in range(1, len(parents) - depth):
+                parents.pop()
+            child = parents[-1].add_child(branch_name, enabled)
+            parents.append(child)
     return stack

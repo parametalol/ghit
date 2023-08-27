@@ -8,12 +8,12 @@ from .args import Args
 def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
     repo = git.Repository(args.repository)
     if repo.is_empty:
-        return repo, None, None
+        return repo, Stack(), None
     stack = open_stack(args.stack)
     if not stack:
         stack = Stack()
         current = get_current_branch(repo)
-        stack.add_child([], current.branch_name)
+        stack.add_child(current.branch_name)
     return repo, stack, initGH(repo, stack, args.offline)
 
 
@@ -38,7 +38,7 @@ def update_upstream(repo: git.Repository, origin: git.Remote, branch: git.Branch
         )
 
 
-def sync_branch(args: Args, repo: git.Repository, gh: GH, origin: git.Remote, record: StackRecord):
+def sync_branch(args: Args, repo: git.Repository, gh: GH, origin: git.Remote, record: Stack):
     branch = repo.branches[record.branch_name]
     if not branch.upstream:
         update_upstream(repo, origin, branch)
@@ -47,4 +47,4 @@ def sync_branch(args: Args, repo: git.Repository, gh: GH, origin: git.Remote, re
         for pr in prs:
             gh.comment(pr)
     else:
-        gh.create_pr(record.parent.branch_name, record.branch_name, args.title, args.draft)
+        gh.create_pr(record.get_parent().branch_name, record.branch_name, args.title, args.draft)

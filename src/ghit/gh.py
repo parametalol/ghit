@@ -1,4 +1,3 @@
-import requests
 import os
 import json
 import subprocess
@@ -113,12 +112,12 @@ class GH:
     def getPRs(self, branch_name: str) -> list[PR]:
         return self.prs.get(branch_name, list[PR]())
 
-    def is_sync(self, remote_pr: PR, record: StackRecord) -> bool:
+    def is_sync(self, remote_pr: PR, record: Stack) -> bool:
         for pr in self.getPRs(record.branch_name):
             if pr.number == remote_pr.number:
-                if remote_pr.base != record.parent.branch_name:
+                if remote_pr.base != record.get_parent().branch_name:
                     logging.debug(
-                        f"remote PR base doesn't match: {remote_pr.base} vs {record.parent.branch_name}"
+                        f"remote PR base doesn't match: {remote_pr.base} vs {record.get_parent().branch_name}"
                     )
                     return False
         return True
@@ -145,10 +144,9 @@ class GH:
             )
         )
 
-    def pr_info(self, args: Args, record: StackRecord) -> list[str]:
+    def pr_info(self, args: Args, record: Stack) -> list[str]:
         lines: list[str] = []
         for pr in self.getPRs(record.branch_name):
-            logging.debug(f"PR id {pr.id}")
             line = [pr_number_with_style(pr)]
             nr = self.not_resolved(pr)
             if not args.verbose and nr:
@@ -177,14 +175,14 @@ class GH:
                 if not sync:
                     for p in self.getPRs(record.branch_name):
                         if p.number == pr.number:
-                            if p.base != record.parent.branch_name:
+                            if p.base != record.get_parent().branch_name:
                                 vlines.append(
                                     with_style(
                                         "dim",
                                         warning("⟳ PR base ")
                                         + emphasis(p.base)
                                         + warning(" doesn't match branch parent ")
-                                        + emphasis(record.parent.branch_name)
+                                        + emphasis(record.get_parent().branch_name)
                                         + warning("."),
                                     )
                                 )
@@ -234,13 +232,13 @@ class GH:
     def _search_stack_prs(self) -> dict[str, list[PR]]:
         prs = dict[str, list[PR]]()
         for record in self.stack.traverse():
-            if not record.parent:
+            if not record.get_parent():
                 prs[record.branch_name] = []
 
         heads = " ".join(
             f"head:{record.branch_name}"
             for record in self.stack.traverse()
-            if record.parent
+            if record.get_parent()
         )
 
         def do(cursor: str):
