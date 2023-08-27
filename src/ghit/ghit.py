@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import os
 import argparse
 import logging
@@ -9,7 +7,7 @@ from .gitools import *
 from .styling import *
 from .top_commands import ls, up, down, top, bottom
 from .stack_commands import check, restack, stack_sync, get_comments
-from .pr_commands import update_pr, pr_sync
+from .pr_commands import update_pr
 
 def add_top_commands(parser: argparse.ArgumentParser):
     commands = parser.add_subparsers(required=True)
@@ -40,7 +38,7 @@ def add_stack_commands(parser: argparse.ArgumentParser):
         help="suggest git commands to rebase the branches according to the stack",
     ).set_defaults(func=restack)
     parser_stack_sub.add_parser(
-        "sync", help="fetch from origin and push stack branches upstream"
+        "sync", help="fetch from origin, push stack branches upstream and update PRs"
     ).set_defaults(func=stack_sync)
 
 def add_pr_commands(parser: argparse.ArgumentParser):
@@ -50,10 +48,8 @@ def add_pr_commands(parser: argparse.ArgumentParser):
         help="create new draft PR or update the existing PR opened from the current branch",
     )
     upr.add_argument("-t", "--title", help="PR title")
+    upr.add_argument("-d", "--draft", help="create draft PR", action="store_true")
     upr.set_defaults(func=update_pr)
-    parser_pr_sub.add_parser(
-        "sync", help="creates or updates PRs of the stack"
-    ).set_defaults(func=pr_sync)
 
 def ghit(argv: list[str]):
     parser = argparse.ArgumentParser()

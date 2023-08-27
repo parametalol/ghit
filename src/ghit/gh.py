@@ -113,28 +113,6 @@ class GH:
     def getPRs(self, branch_name: str) -> list[PR]:
         return self.prs.get(branch_name, list[PR]())
 
-    def _call(
-        self,
-        endpoint: str,
-        params: dict[str, str] = {},
-        body: any = None,
-        method: str = "GET",
-    ) -> any:
-        response = requests.request(
-            method,
-            url=f"https://api.github.com/repos/{self.owner}/{self.repository}/{endpoint}",
-            params=params,
-            headers={
-                "Authorization": f"Bearer {self.token}",
-                "Accept": "application/vnd.github.v3+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-            json=body,
-        )
-        if not response.ok:
-            raise BaseException(response.text)
-        return response.json()
-
     def is_sync(self, remote_pr: PR, record: StackRecord) -> bool:
         for pr in self.getPRs(record.branch_name):
             if pr.number == remote_pr.number:
@@ -292,40 +270,44 @@ class GH:
             logging.debug(f"Next cursor: {cursor}")
         return prs
 
-    def comment(self, branch: git.Branch, new: bool = False):
-        for pr in self.getPRs(branch.branch_name):
-            comment = self._find_stack_comment(pr) if not new else None
-            md = self._make_stack_comment(pr)
-            if comment:
-                if comment.body == md:
-                    continue
-                md = json.dumps(md, ensure_ascii=False)
-                graphql(self.token, GQL_UPDATE_COMMENT.format(id=comment.id, body=md))
-                print(f"Updated comment in {pr_number_with_style(pr)}.")
-            else:
-                md = json.dumps(md, ensure_ascii=False)
-                graphql(self.token, GQL_ADD_COMMENT.format(pr_id=pr.id, body=md))
-                print(f"Commented {pr_number_with_style(pr)}.")
+    def comment(self, pr: PR, new: bool = False):
+        comment = self._find_stack_comment(pr) if not new else None
+        md = self._make_stack_comment(pr)
+        if comment:
+            if comment.body == md:
+                return
+            md = json.dumps(md, ensure_ascii=False)
+            graphql(self.token, GQL_UPDATE_COMMENT.format(id=comment.id, body=md))
+            print(f"Updated comment in {pr_number_with_style(pr)}.")
+        else:
+            md = json.dumps(md, ensure_ascii=False)
+            graphql(self.token, GQL_ADD_COMMENT.format(pr_id=pr.id, body=md))
+            print(f"Commented {pr_number_with_style(pr)}.")
 
-    def create_pr(self, base: str, branch_name: str, title: str = "") -> any:
-        pr = self._call(
-            endpoint="pulls",
-            method="POST",
-            body={
-                "title": title or branch_name,
-                "base": base,
-                "head": f"{self.owner}:{branch_name}",
-                "body": self.template,
-                "draft": True,
-            },
+    def create_pr(self, base: str, branch_name: str, title: str = "", draft: bool = False) -> any:
+        repo_id_json = graphql(
+            self.token,
+            GQL_GET_REPO_ID.format(owner=self.owner, repository=self.repository),
         )
+
+        pr_json = graphql(
+            self.token,
+            GQL_CREATE_PR.format(
+                repository_id=repo_id_json["data"]["repository"]["id"],
+                base=base,
+                head=f"{self.owner}:{branch_name}",
+                title=json.dumps(title or branch_name, ensure_ascii=False),
+                draft="true" if draft else "false",
+                body=json.dumps(self.template, ensure_ascii=False),
+            ),
+        )
+        pr = make_pr(pr_json["data"]["pullRequest"])
         if branch_name in self.prs:
             self.prs[branch_name].append(pr)
         else:
             self.prs.update({branch_name: [pr]})
-        branch = self.repo.lookup_branch(branch_name)
         print("Created draft PR ", pr_number_with_style(pr), ".", sep="")
-        self.comment(branch, True)
+        self.comment(pr, True)
         return pr
 
 
