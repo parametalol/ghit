@@ -8,11 +8,11 @@ def pr_sync(args: Args):
     for record in stack.traverse():
         if record.parent is None:
             continue
-        prs = gh.find_PRs(record.branch_name)
+        prs = gh.getPRs(record.branch_name)
         if len(prs) == 0:
             gh.create_pr(record.parent.branch_name, record.branch_name)
         else:
-            gh.comment(record.branch_name)
+            gh.comment(repo.lookup_branch(record.branch_name))
 
 
 def update_pr(args: Args):
@@ -29,11 +29,10 @@ def update_pr(args: Args):
         branch = repo.branches[record.branch_name]
         if not branch.upstream:
             update_upstream(repo, origin, branch)
-        prs = gh.find_PRs(record.branch_name)
-        if len(prs) == 0:
-            gh.create_pr(record.parent.branch_name, record.branch_name, args.title)
+        if gh.getPRs(record.branch_name):
+            gh.comment(repo.lookup_branch(record.branch_name))
         else:
-            gh.comment(record.branch_name)
+            gh.create_pr(record.parent.branch_name, record.branch_name, args.title)
         break
     else:
         print(warning("Couldn't find current branch in the stack."))

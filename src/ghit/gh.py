@@ -1,5 +1,6 @@
 import requests
 import os
+import json
 import subprocess
 import logging
 import pygit2 as git
@@ -169,6 +170,7 @@ class GH:
     def pr_info(self, args: Args, record: StackRecord) -> list[str]:
         lines: list[str] = []
         for pr in self.getPRs(record.branch_name):
+            logging.debug(f"PR id {pr.id}")
             line = [pr_number_with_style(pr)]
             nr = self.not_resolved(pr)
             if not args.verbose and nr:
@@ -231,7 +233,7 @@ class GH:
 
         return lines
 
-    def _find_stack_comment(self, pr: PR) -> any:
+    def _find_stack_comment(self, pr: PR) -> Comment | None:
         for comment in pr.comments:
             if comment.body.startswith(COMMENT_FIRST_LINE):
                 return comment
@@ -294,24 +296,16 @@ class GH:
         for pr in self.getPRs(branch.branch_name):
             comment = self._find_stack_comment(pr) if not new else None
             md = self._make_stack_comment(pr)
-            if comment is not None:
-                if comment["body"] == md:
+            if comment:
+                if comment.body == md:
                     continue
-                self._call(
-                    f"issues/comments/{comment['id']}",
-                    None,
-                    {"body": md},
-                    "PATCH",
-                )
-                print(f"Updated comment in {pr_number_with_style(branch, pr)}.")
+                md = json.dumps(md, ensure_ascii=False)
+                graphql(self.token, GQL_UPDATE_COMMENT.format(id=comment.id, body=md))
+                print(f"Updated comment in {pr_number_with_style(pr)}.")
             else:
-                self._call(
-                    f"issues/{pr.number}/comments",
-                    None,
-                    {"body": md},
-                    "POST",
-                )
-                print(f"Commented {pr_number_with_style(branch, pr)}.")
+                md = json.dumps(md, ensure_ascii=False)
+                graphql(self.token, GQL_ADD_COMMENT.format(pr_id=pr.id, body=md))
+                print(f"Commented {pr_number_with_style(pr)}.")
 
     def create_pr(self, base: str, branch_name: str, title: str = "") -> any:
         pr = self._call(
@@ -330,7 +324,7 @@ class GH:
         else:
             self.prs.update({branch_name: [pr]})
         branch = self.repo.lookup_branch(branch_name)
-        print("Created draft PR ", pr_number_with_style(branch, pr), ".", sep="")
+        print("Created draft PR ", pr_number_with_style(pr), ".", sep="")
         self.comment(branch, True)
         return pr
 

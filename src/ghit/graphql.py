@@ -1,5 +1,6 @@
 import requests
 from dataclasses import dataclass
+import logging
 
 
 # region query
@@ -37,6 +38,7 @@ edges {
 
         comments(first: 10) {
             nodes {
+                id
                 author {
                     login
                     ... on User {
@@ -65,6 +67,7 @@ edges {
                 isOutdated
                 comments(last: 1) {
                     nodes {
+                        id
                         path
                         url
                         author {
@@ -104,10 +107,20 @@ edges {
 }
 """
 
-GQL_ADD_COMMENT="""
-mutation AddComment {
-  addComment(input: { subjectId: "{id}", body: {body} })
-}"""
+GQL_ADD_COMMENT = """
+mutation AddComment {{
+  addComment(input: {{ subjectId: "{pr_id}", body: {body} }}) {{
+    clientMutationId
+  }}
+}}"""
+
+GQL_UPDATE_COMMENT = """
+mutation UpdateComment {{
+  updateIssueComment(input: {{ id: "{id}", body: {body} }}) {{
+    clientMutationId
+  }}
+}}"""
+
 
 # endregion query
 
@@ -133,6 +146,7 @@ class Reaction:
 
 @dataclass
 class Comment:
+    id: str
     author: Author
     body: str
     reacted: bool
@@ -194,6 +208,7 @@ def _make_reaction(node: any) -> Reaction:
 
 def _make_comment(node: any) -> Comment:
     return Comment(
+        id=node["id"],
         author=_make_author(node["author"]),
         body=node["body"],
         reacted=False,
@@ -249,6 +264,7 @@ def graphql(token: str, query: str) -> any:
         },
         json={"query": query},
     )
+    logging.debug(f"response: {response}")
     if not response.ok:
         raise BaseException(response.text)
     return response.json()
