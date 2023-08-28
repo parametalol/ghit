@@ -242,6 +242,8 @@ class GH:
             for record in self.stack.traverse()
             if record.get_parent()
         )
+        if not heads:
+            return prs
 
         def do(cursor: str):
             search = GQL_SEARCH.format(
