@@ -131,7 +131,7 @@ class GH:
             if not thread.comments:
                 return False
             for reaction in thread.comments[-1].reactions:
-                if reaction.author.login == pr.author.login:
+                if reaction.author.login == pr.author.login and reaction.content not in ["eyes", "confused"]:
                     return True
             return False
 
