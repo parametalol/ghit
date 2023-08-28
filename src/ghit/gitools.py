@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 import pygit2 as git
 from .styling import *
-
+from .stack import Stack
 
 def get_git_ssh_credentials() -> git.credentials.KeypairFromAgent:
     return git.KeypairFromAgent("git")
@@ -34,18 +34,19 @@ def last_commits(
             break
 
 
-def checkout(repo: git.Repository, parent_name: str | None, branch_name: str | None):
+def checkout(repo: git.Repository, record: Stack):
+    branch_name = record.branch_name
     branch = repo.branches.get(branch_name) if branch_name else None
     if not branch:
         print(danger("Error:"), emphasis(branch_name), danger("not found in local."))
         return
     repo.checkout(branch)
     print(f"Checked-out {emphasis(branch.branch_name)}.")
-    if parent_name:
-        parent_branch = repo.branches[parent_name]
+    if record.get_parent():
+        parent_branch = repo.branches[record.get_parent().branch_name]
         a, _ = repo.ahead_behind(parent_branch.target, branch.target)
         if a:
-            print(f"This branch has fallen back behind {emphasis(parent_name)}.")
+            print(f"This branch has fallen back behind {emphasis(record.get_parent().branch_name)}.")
             print("You may want to restack to pick up the following commits:")
             for commit in last_commits(repo, parent_branch.target, a):
                 print(

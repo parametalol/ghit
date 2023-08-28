@@ -5,8 +5,12 @@ from .styling import *
 from .gh import initGH, GH
 from .args import Args
 
+__connections: tuple[git.Repository, Stack, GH] = None
 
 def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
+    global __connections
+    if __connections:
+        return __connections
     repo = git.Repository(args.repository)
     if repo.is_empty:
         return repo, Stack(), None
@@ -15,7 +19,8 @@ def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
         stack = Stack()
         current = get_current_branch(repo)
         stack.add_child(current.branch_name)
-    return repo, stack, initGH(repo, stack, args.offline)
+    __connections = (repo, stack, initGH(repo, stack, args.offline))
+    return __connections
 
 
 def update_upstream(repo: git.Repository, origin: git.Remote, branch: git.Branch):

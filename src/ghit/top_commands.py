@@ -93,24 +93,24 @@ def _print_line(
 
 def _move(args: Args, command: str):
     repo, stack, _ = connect(args)
-    to_checkout_name = get_current_branch(repo).branch_name
-    p = stack
-
-    pick_next: bool = False
-    prev_name: str | None = None
-    for record in stack.traverse():
-        p = record.get_parent()
-        if pick_next:
-            to_checkout_name = record.branch_name
+    current = get_current_branch(repo).branch_name
+    i = stack.traverse()
+    p = None
+    for record in i:
+        if record.branch_name == current:
+            if command=="up":
+                record = p
+            else:
+                try:
+                    record = next(i)
+                except StopIteration:
+                    return
             break
-        if record.branch_name == to_checkout_name:
-            if command == "up":
-                to_checkout_name = prev_name
-                break
-            pick_next = True
-        prev_name = record.branch_name
-    if to_checkout_name is not None:
-        checkout(repo, p.branch_name, to_checkout_name)
+        p = record
+
+    if record:
+        if record.branch_name != current:
+            checkout(repo, record)
     else:
         _jump(args, "top")
 
@@ -125,15 +125,16 @@ def down(args):
 
 def _jump(args: Args, command: str):
     repo, stack, _ = connect(args)
-    p = stack
-    to_checkout_name: str | None = None
-    for record in stack.traverse():
-        p = record.get_parent()
-        to_checkout_name = record.branch_name
-        if command == "top":
-            break
-    if to_checkout_name is not None:
-        checkout(repo, p.branch_name, to_checkout_name)
+    if command == "top":
+        try:
+            record = next(stack.traverse())
+        except StopIteration:
+            return
+    else:
+        for record in stack.traverse():
+            pass
+    if record and record.branch_name != get_current_branch(repo).branch_name:
+        checkout(repo, record)
 
 
 def top(args):
