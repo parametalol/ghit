@@ -40,11 +40,8 @@ class Stack:
     def is_root(self) -> bool:
         return self.__parent is None
 
-    def first_level(self) -> bool:
-        return not self.is_root() and not self.get_parent()
-
     def traverse(self, with_first_level: bool = True) -> Iterator[Stack]:
-        if not self.is_root() and self._enabled and (not self.first_level() or with_first_level):
+        if not self.is_root() and self._enabled and (self.get_parent() or with_first_level):
             yield self
         for r in self._children.values():
             yield from r.traverse(with_first_level)

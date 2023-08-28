@@ -15,7 +15,7 @@ def ls(args: Args):
         return "  " if record.is_last_child() else "│ "
 
     for record in stack.traverse():
-        parent_prefix = parent_prefix[: record.depth - 1]
+        parent_prefix = parent_prefix[: record.depth - 2]
         current = record.branch_name == checked_out
 
         line = _print_line(
@@ -25,7 +25,7 @@ def ls(args: Args):
             record,
         )
 
-        if not record.first_level():
+        if record.get_parent():
             parent_prefix.append(parent_tab(record))
 
         if gh:
@@ -38,7 +38,7 @@ def ls(args: Args):
                     print(
                         " ",
                         " ".join(parent_prefix),
-                        "│   " if record._children else "    ",
+                        "│   " if record.length() else "    ",
                         i,
                     )
                 continue
@@ -50,14 +50,13 @@ def _print_line(
     current: bool,
     parent_prefix: list[str],
     record: Stack,
-
 ) -> list[str]:
     line_color = calm if current else normal
     line = [line_color("⯈" if current else " "), *parent_prefix]
 
     behind = 0
     branch = repo.branches.get(record.branch_name)
-    if not record.first_level():
+    if record.get_parent():
         if branch:
             behind, _ = repo.ahead_behind(
                 repo.branches[record.get_parent().branch_name].target,
@@ -98,7 +97,7 @@ def _move(args: Args, command: str):
     p = None
     for record in i:
         if record.branch_name == current:
-            if command=="up":
+            if command == "up":
                 record = p
             else:
                 try:
