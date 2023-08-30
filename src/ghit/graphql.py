@@ -42,6 +42,7 @@ def paged(name: str, args: dict[str, str], *f: str) -> str:
 # endregion builder
 
 # region query
+FIRST_FEW = {"first": 10}
 
 GQL_REACTION = fields("content", obj("user", "login", "name"))
 GQL_AUTHOR = obj("author", "login", on("User", "name"))
@@ -51,16 +52,16 @@ GQL_COMMENT = fields(
     "body",
     "minimizedReason",
     GQL_AUTHOR,
-    paged("reactions", {"last": 10}, GQL_REACTION),
+    paged("reactions", FIRST_FEW, GQL_REACTION),
 )
 GQL_REVIEW_THREAD = fields(
     "path",
     "isResolved",
     "isOutdated",
-    paged("comments", {"last": 10}, GQL_COMMENT),
+    paged("comments", FIRST_FEW, GQL_COMMENT),
 )
 GQL_REVIEW = fields("state", "url", GQL_AUTHOR)
-GQL_COMMIT = obj("commit", paged("comments", {"first": 10}, GQL_COMMENT))
+GQL_COMMIT = obj("commit", paged("comments", FIRST_FEW, GQL_COMMENT))
 GQL_PR = fields(
     "number",
     "id",
@@ -73,21 +74,23 @@ GQL_PR = fields(
     "closed",
     "merged",
     "state",
-    paged("comments", {"first": 10}, GQL_COMMENT),
-    paged("reviewThreads", {"first": 10}, GQL_REVIEW_THREAD),
-    paged("reviews", {"first": 10}, GQL_REVIEW),
-    paged("commits", {"first": 10}, GQL_COMMIT),
+    paged("comments", FIRST_FEW, GQL_COMMENT),
+    paged("reviewThreads", FIRST_FEW, GQL_REVIEW_THREAD),
+    paged("reviews", FIRST_FEW, GQL_REVIEW),
+    paged("commits", FIRST_FEW, GQL_COMMIT),
 )
 
-def cursor_or_null(c: str | None)->str:
+
+def cursor_or_null(c: str | None) -> str:
     return f'"{c}"' if c else "null"
+
 
 GQL_PRS_QUERY = lambda owner, repository, heads, after=None: query(
     "query search_prs",
     paged(
         "search",
         {
-            "first": 10,
+            **FIRST_FEW,
             "after": cursor_or_null(after),
             "type": "ISSUE",
             "query": f'"repo:{owner}/{repository} is:pr {heads}"',
@@ -106,7 +109,7 @@ def pr_details_query(detail: str, obj: str):
             func(
                 "pullRequest",
                 {"number": pr_number},
-                paged(detail, {"first": 10, "after": cursor_or_null(after)}, obj),
+                paged(detail, {**FIRST_FEW, "after": cursor_or_null(after)}, obj),
             ),
         ),
     )
@@ -126,7 +129,9 @@ GQL_PR_COMMENT_REACTIONS_QUERY = (
                 paged(
                     "comments",
                     {"first": 1, "after": cursor_or_null(comment_cursor)},
-                    paged("reactions", {"first": 10, "after": cursor_or_null(after)}, obj),
+                    paged(
+                        "reactions", {**FIRST_FEW, "after": cursor_or_null(after)}, obj
+                    ),
                 ),
             ),
         ),
@@ -146,54 +151,49 @@ GQL_GET_REPO_ID = lambda owner, repository: query(
 
 # region mutations
 
-GQL_ADD_COMMENT = """
-mutation AddComment {{
-  addComment(input: {{ subjectId: "{pr_id}", body: {body} }}) {{
-    clientMutationId
-  }}
-}}"""
 
-GQL_UPDATE_COMMENT = """
-mutation UpdateComment {{
-  updateIssueComment(input: {{ id: "{id}", body: {body} }}) {{
-    clientMutationId
-  }}
-}}"""
+def input(**args):
+    extra = ", ".join(f"{k}: {v}" for k, v in args.items())
+    return {"input": f"{{ {extra} }}"}
 
 
-GQL_CREATE_PR = """
-mutation MyMutation {{
-  createPullRequest(
-    input: {{ repositoryId: "{repository_id}", baseRefName: "{base}", headRefName: "{head}", title: {title}, draft: {draft}, body: {body} }}
-  ) {{
-    clientMutationId
-    pullRequest {{
-        number
-        id
-        title
-        author {{
-            login
-            ... on User {{
-                name
-            }}
-        }}
-        baseRefName
-        headRefName
-        isDraft
-        locked
-        closed
-        merged
-        state
-    }}
-  }}
-}}"""
+GQL_ADD_COMMENT = query(
+    "mutation add_pr_comment",
+    func(
+        "addComment", input(subjectId='"{pr_id}"', body='"{body}"'), "clientMutationId"
+    ),
+)
+GQL_UPDATE_COMMENT = query(
+    "mutation update_pr_comment",
+    func("updateIssueComment", input(id='"{id}"', body='"{body}"'), "clientMutationId"),
+)
 
-GQL_UPDATE_PR_BASE = """mutation updatePR {{
-  updatePullRequest(input: {{pullRequestId: "{id}", baseRefName: "{base}"}}) {{
-    clientMutationId
-  }}
-}}"""
 
+GQL_CREATE_PR = query(
+    "mutation create_pr",
+    func(
+        "createPullRequest",
+        input(
+            repositoryId='"{repository_id}"',
+            baseRefName='"{base}"',
+            headRefName='"{head}"',
+            title="{title}",
+            draft="{draft}",
+            body="{body}",
+        ),
+        "clientMutationId",
+        obj("pullRequest", GQL_PR),
+    ),
+)
+
+GQL_UPDATE_PR_BASE = query(
+    "mutation update_pr",
+    func(
+        "updatePullRequest",
+        input(pullRequestId='"{id}"', baseRefName='"{base}"'),
+        "clientMutationId",
+    ),
+)
 # endregion mutations
 
 # region classes
@@ -220,7 +220,7 @@ class Pages(Generic[T]):
             if not "data" in response:
                 raise Exception("GitHub GraphQL: No data in response")
             data = response["data"]
-            self.data.extend(map(maker,edges(data, name)))
+            self.data.extend(map(maker, edges(data, name)))
             after = cursor(data, name)
             if not end:
                 end = end_cursor(data, name)
