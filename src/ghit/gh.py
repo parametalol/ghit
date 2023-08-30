@@ -132,14 +132,22 @@ class GH:
                 logging.debug(f"no comments?")
                 return False
             for reaction in thread.comments.data[-1].reactions.data:
-                if reaction.author.login == pr.author.login and reaction.content not in ["EYES", "CONFUSED"]:
-                    logging.debug(f"{thread.comments.data[-1].id} author reacted with {reaction.content}")
+                if (
+                    reaction.author.login == pr.author.login
+                    and reaction.content not in ["EYES", "CONFUSED"]
+                ):
+                    logging.debug(
+                        f"{thread.comments.data[-1].id} author reacted with {reaction.content}"
+                    )
                     return True
             logging.debug(f"author didn't react")
             return False
 
         def author_commented(thread: CodeThread) -> bool:
-            commented = thread.comments.data and thread.comments.data[-1].author.login == pr.author.login
+            commented = (
+                thread.comments.data
+                and thread.comments.data[-1].author.login == pr.author.login
+            )
             logging.debug(f"{thread.comments.data[-1].id} author {commented=}")
             return commented
 
@@ -149,10 +157,12 @@ class GH:
             )
         )
 
-    def pr_info(self, args: Args, record: Stack) -> tuple[list[str], dict[PR, CodeThread], dict[PR, Review]]:
+    def pr_info(
+        self, args: Args, record: Stack
+    ) -> tuple[list[str], dict[PR, CodeThread], dict[PR, Review]]:
         lines: list[str] = []
         unresolved: dict[PR, list[CodeThread]] = {}
-        notapproved: dict[PR,list[Review]] = {}
+        notapproved: dict[PR, list[Review]] = {}
         for pr in self.getPRs(record.branch_name):
             line = [pr_number_with_style(pr)]
             nr = self.unresolved(pr)
@@ -160,7 +170,9 @@ class GH:
                 unresolved[pr] = nr
             if not args.verbose and nr:
                 line.append(warning("!"))
-            cr = [r for r in pr.reviews.data if r.state and r.state == "CHANGES_REQUESTED"]
+            cr = [
+                r for r in pr.reviews.data if r.state and r.state == "CHANGES_REQUESTED"
+            ]
             if cr:
                 notapproved[pr] = cr
             if not args.verbose and cr:
@@ -246,7 +258,8 @@ class GH:
             if not record.get_parent():
                 prs[record.branch_name] = []
 
-        heads = [record.branch_name
+        heads = [
+            record.branch_name
             for record in self.stack.traverse()
             if record.get_parent()
         ]
@@ -268,11 +281,11 @@ class GH:
                 logging.debug("comment is up to date")
                 return
             md = json.dumps(md, ensure_ascii=False)
-            graphql(self.token, GQL_UPDATE_COMMENT.format(id=comment.id, body=md))
+            graphql(self.token, GQL_UPDATE_COMMENT(input(id=f'"{comment.id}"', body=md)))
             print(f"Updated comment in {pr_number_with_style(pr)}.")
         else:
             md = json.dumps(md, ensure_ascii=False)
-            graphql(self.token, GQL_ADD_COMMENT.format(pr_id=pr.id, body=md))
+            graphql(self.token, GQL_ADD_COMMENT(input(subjectId=f'"{pr.id}"', body=md)))
             print(f"Commented {pr_number_with_style(pr)}.")
 
     def update_pr(self, record: Stack, pr: PR):
@@ -280,32 +293,47 @@ class GH:
         if pr.base == base:
             return
         logging.debug(f"updating PR base from {pr.base} to {base}")
-        graphql(self.token, GQL_UPDATE_PR_BASE.format(id=pr.id, base=base))
+        graphql(
+            self.token,
+            GQL_UPDATE_PR_BASE(
+                input(pullRequestId=f'"{pr.id}"', baseRefName=f'"{base}"')
+            ),
+        )
         pr.base = base
         print(f"Set PR {pr_number_with_style(pr)} base branch to {emphasis(base)}.")
 
-    def create_pr(self, base: str, branch_name: str, title: str = "", draft: bool = False) -> any:
+    def create_pr(
+        self, base: str, branch_name: str, title: str = "", draft: bool = False
+    ) -> any:
         logging.debug(f"creating PR wiht base {base} and head {branch_name}")
         base_branch = self.repo.lookup_branch(base)
         if not base_branch.upstream:
             raise Exception(f"Base branch {base} has no upstream.")
         repo_id_json = graphql(
             self.token,
-            GQL_GET_REPO_ID.format(owner=self.owner, repository=self.repository),
+            GQL_GET_REPO_ID(owner=self.owner, repository=self.repository),
         )
+
+        repository_id = repo_id_json["data"]["repository"]["id"]
+        head = f"{self.owner}:{branch_name}"
+        title = json.dumps(title or branch_name, ensure_ascii=False)
+        draft = "true" if draft else "false"
+        body = json.dumps(self.template, ensure_ascii=False)
 
         pr_json = graphql(
             self.token,
-            GQL_CREATE_PR.format(
-                repository_id=repo_id_json["data"]["repository"]["id"],
-                base=base,
-                head=f"{self.owner}:{branch_name}",
-                title=json.dumps(title or branch_name, ensure_ascii=False),
-                draft="true" if draft else "false",
-                body=json.dumps(self.template, ensure_ascii=False),
+            GQL_CREATE_PR(
+                input(
+                    repositoryId=f'"{repository_id}"',
+                    baseRefName=f'"{base}"',
+                    headRefName=f'"{head}"',
+                    title=title,
+                    draft=draft,
+                    body=body,
+                )
             ),
         )
-        pr = make_pr(pr_json["data"]["createPullRequest"]["pullRequest"])
+        pr = make_pr({"node": pr_json["data"]["createPullRequest"]["pullRequest"]})
         if branch_name in self.__prs:
             self.__prs[branch_name].append(pr)
         else:

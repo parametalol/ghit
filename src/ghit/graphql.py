@@ -152,45 +152,38 @@ GQL_GET_REPO_ID = lambda owner, repository: query(
 # region mutations
 
 
-def input(**args):
+def input(**args) -> dict[str, str]:
     extra = ", ".join(f"{k}: {v}" for k, v in args.items())
     return {"input": f"{{ {extra} }}"}
 
 
-GQL_ADD_COMMENT = query(
+GQL_ADD_COMMENT = lambda comment_input: query(
     "mutation add_pr_comment",
     func(
-        "addComment", input(subjectId='"{pr_id}"', body='"{body}"'), "clientMutationId"
+        "addComment", comment_input, "clientMutationId"
     ),
 )
-GQL_UPDATE_COMMENT = query(
+GQL_UPDATE_COMMENT = lambda comment_input: query(
     "mutation update_pr_comment",
-    func("updateIssueComment", input(id='"{id}"', body='"{body}"'), "clientMutationId"),
+    func("updateIssueComment", comment_input, "clientMutationId"),
 )
 
 
-GQL_CREATE_PR = query(
+GQL_CREATE_PR = lambda pr_input: query(
     "mutation create_pr",
     func(
         "createPullRequest",
-        input(
-            repositoryId='"{repository_id}"',
-            baseRefName='"{base}"',
-            headRefName='"{head}"',
-            title="{title}",
-            draft="{draft}",
-            body="{body}",
-        ),
+        pr_input,
         "clientMutationId",
         obj("pullRequest", GQL_PR),
     ),
 )
 
-GQL_UPDATE_PR_BASE = query(
+GQL_UPDATE_PR_BASE = lambda pr_input: query(
     "mutation update_pr",
     func(
         "updatePullRequest",
-        input(pullRequestId='"{id}"', baseRefName='"{base}"'),
+        pr_input,
         "clientMutationId",
     ),
 )
@@ -212,7 +205,9 @@ class Pages(Generic[T]):
         return self.next_cursor == self.end_cursor and not self._never_queried
 
     def append_all(self, token: str, maker: Callable[[any], T], next_page):
-        logging.debug(f"querying all {self.name} {self._never_queried=}, {self.next_cursor=}, {self.end_cursor=}")
+        logging.debug(
+            f"querying all {self.name} {self._never_queried=}, {self.next_cursor=}, {self.end_cursor=}"
+        )
         while not self.complete():
             logging.debug(f"querying {self.name} after cursor {self.next_cursor}")
             response = graphql(token, next_page(self.next_cursor))
@@ -297,7 +292,9 @@ class PR:
     def __hash__(self) -> int:
         return self.number
 
+
 # endregion classes
+
 
 # region helpers
 def _path(obj: any, *keys: str) -> any:
@@ -307,7 +304,6 @@ def _path(obj: any, *keys: str) -> any:
         else:
             return None
     return obj
-
 
 
 def edges(obj: any, name: str) -> Iterator[any]:
@@ -329,9 +325,11 @@ def end_cursor(obj: any, field: str) -> str:
         return None
     return _path(obj, field, "pageInfo", "endCursor")
 
+
 # endregion helpers
 
 # region constructors
+
 
 def _make_author(obj: any) -> Author:
     return Author(
