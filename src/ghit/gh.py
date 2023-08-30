@@ -125,19 +125,19 @@ class GH:
         return True
 
     def not_resolved(self, pr: PR) -> list[CodeThread]:
-        result = [thread for thread in pr.threads if not thread.resolved]
+        result = [thread for thread in pr.threads.data if not thread.resolved]
 
         def author_reacted(thread: CodeThread) -> bool:
-            if not thread.comments:
+            if not thread.comments.data:
                 return False
-            for reaction in thread.comments[-1].reactions:
+            for reaction in thread.comments.data[-1].reactions.data:
                 if reaction.author.login == pr.author.login and reaction.content not in ["eyes", "confused"]:
                     return True
             return False
 
         def author_commented(thread: CodeThread) -> bool:
             return (
-                thread.comments and thread.comments[-1].author.login == pr.author.login
+                thread.comments.data and thread.comments.data[-1].author.login == pr.author.login
             )
 
         return list(
@@ -153,10 +153,10 @@ class GH:
             nr = self.not_resolved(pr)
             if not args.verbose and nr:
                 line.append(warning("!"))
-            cr = [r for r in pr.reviews if r.state and r.state == "CHANGES_REQUESTED"]
+            cr = [r for r in pr.reviews.data if r.state and r.state == "CHANGES_REQUESTED"]
             if not args.verbose and cr:
                 line.append(danger("✗"))
-            approved = [r for r in pr.reviews if r.state == "APPROVED"]
+            approved = [r for r in pr.reviews.data if r.state == "APPROVED"]
             if not args.verbose and not cr and approved:
                 line.append(good("✓"))
             sync = self.is_sync(pr, record)
@@ -190,7 +190,7 @@ class GH:
                                 )
                 if nr:
                     for thread in nr:
-                        for c in thread.comments:
+                        for c in thread.comments.data:
                             vlines.append(
                                 with_style(
                                     "dim", warning("! No reaction to a comment by ")
@@ -212,7 +212,7 @@ class GH:
         return lines
 
     def _find_stack_comment(self, pr: PR) -> Comment | None:
-        for comment in pr.comments:
+        for comment in pr.comments.data:
             if comment.body.startswith(COMMENT_FIRST_LINE):
                 return comment
         return None
@@ -237,39 +237,17 @@ class GH:
             if not record.get_parent():
                 prs[record.branch_name] = []
 
-        heads = " ".join(
-            f"head:{record.branch_name}"
+        heads = [record.branch_name
             for record in self.stack.traverse()
             if record.get_parent()
-        )
-        if not heads:
-            return prs
+        ]
+        for pr in search_prs(self.token, self.owner, self.repository, heads):
+            if pr.head not in prs:
+                prs.update({pr.head: [pr]})
+            else:
+                prs[pr.head].append(pr)
 
-        def do(cursor: str):
-            search = GQL_SEARCH.format(
-                owner=self.owner, repository=self.repository, heads=heads, cursor=cursor
-            )
-
-            query = f"{GQL_QUERY} {{ {search} {{ {GQL_FIELDS} }} }}"
-            response = graphql(self.token, query)
-            edges = response["data"]["search"]["edges"]
-            for edge in edges:
-                pr_node = edge["node"]
-                pr = make_pr(pr_node)
-                if pr.head not in prs:
-                    prs.update({pr.head: [pr]})
-                else:
-                    prs[pr.head].append(pr)
-            return edges
-
-        cursor = "null"
-        while True:
-            edges = do(cursor)
-            if not edges:
-                logging.debug("Query done.")
-                break
-            cursor = '"' + edges[-1]["cursor"] + '"'
-            logging.debug(f"Next cursor: {cursor}")
+        logging.debug("Query done.")
         return prs
 
     def comment(self, pr: PR):
