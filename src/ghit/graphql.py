@@ -58,10 +58,10 @@ GQL_REVIEW_THREAD = fields(
     "path",
     "isResolved",
     "isOutdated",
-    paged("comments", FIRST_FEW, GQL_COMMENT),
+    paged("comments", {"last": 1}, GQL_COMMENT),
 )
 GQL_REVIEW = fields("state", "url", GQL_AUTHOR)
-GQL_COMMIT = obj("commit", paged("comments", FIRST_FEW, GQL_COMMENT))
+GQL_COMMIT = obj("commit", paged("comments", {"last": 1}, GQL_COMMENT))
 GQL_PR = fields(
     "number",
     "id",
@@ -105,7 +105,7 @@ def pr_details_query(detail: str, obj: str):
         f"query pr_{detail}",
         func(
             "repository",
-            {"owner": f'"{owner}"', "repository": f'"{repository}"'},
+            {"owner": f'"{owner}"', "name": f'"{repository}"'},
             func(
                 "pullRequest",
                 {"number": pr_number},
@@ -122,7 +122,7 @@ GQL_PR_COMMENT_REACTIONS_QUERY = (
         f"query pr_comments_reactions",
         func(
             "repository",
-            {"owner": f'"{owner}"', "repository": f'"{repository}"'},
+            {"owner": f'"{owner}"', "name": f'"{repository}"'},
             func(
                 "pullRequest",
                 {"number": pr_number},
@@ -144,7 +144,7 @@ GQL_PR_REVIEWS_QUERY = pr_details_query("reviews", GQL_REVIEW)
 
 GQL_GET_REPO_ID = lambda owner, repository: query(
     "query get_repo_id",
-    func("repository", {"owner": f'"{owner}"', "repository": f'"{repository}"'}, "id"),
+    func("repository", {"owner": f'"{owner}"', "name": f'"{repository}"'}, "id"),
 )
 
 # endregion query
@@ -200,34 +200,32 @@ GQL_UPDATE_PR_BASE = query(
 
 
 class Pages(Generic[T]):
-    def __init__(self, node: any, name: str, data: list[T]) -> None:
+    def __init__(self, node: any, name: str, data: list[T] | None = None) -> None:
         super().__init__()
         self.name = name
         self.next_cursor: str = cursor(node, name)
         self.end_cursor: str = end_cursor(node, name)
-        self.data = data
+        self.data = list(data) if data else []
+        self._never_queried = data is None
 
     def complete(self) -> bool:
-        return self.next_cursor == self.end_cursor
+        return self.next_cursor == self.end_cursor and not self._never_queried
 
     def append_all(self, token: str, maker: Callable[[any], T], next_page):
-        after = self.next_cursor
-        end = self.end_cursor
-        name = self.name
-        while after != end:
-            logging.debug(f"querying {name} after cursor {after}")
-            response = graphql(token, next_page(after))
-            if not "data" in response:
+        logging.debug(f"querying all {self.name} {self._never_queried=}, {self.next_cursor=}, {self.end_cursor=}")
+        while not self.complete():
+            logging.debug(f"querying {self.name} after cursor {self.next_cursor}")
+            response = graphql(token, next_page(self.next_cursor))
+            if "data" not in response:
                 raise Exception("GitHub GraphQL: No data in response")
             data = response["data"]
-            self.data.extend(map(maker, edges(data, name)))
-            after = cursor(data, name)
-            if not end:
-                end = end_cursor(data, name)
-                logging.debug(f"end cursor {end}")
-        self.next_cursor = after
-        self.end_cursor = end
-        logging.debug(f"queried all {name}")
+            self._never_queried = False
+            if not self.end_cursor:
+                self.end_cursor = end_cursor(data, self.name)
+                logging.debug(f"end cursor {self.end_cursor}")
+            self.data.extend(map(maker, edges(data, self.name)))
+            self.next_cursor = cursor(data, self.name)
+        logging.debug(f"queried all {self.name}")
 
 
 @dataclass
@@ -296,29 +294,54 @@ class PR:
     reviews: Pages[Review]
     commits: Pages[Commit]
 
+    def __hash__(self) -> int:
+        return self.number
 
 # endregion classes
 
-# region constructors
-
-
-def _path(node: any, *keys: str) -> any:
+# region helpers
+def _path(obj: any, *keys: str) -> any:
     for k in keys:
-        if k in node:
-            node = node[k]
+        if k in obj:
+            obj = obj[k]
         else:
             return None
-    return node
+    return obj
 
 
-def _make_author(node: any) -> Author:
+
+def edges(obj: any, name: str) -> Iterator[any]:
+    edges = _path(obj, name, "edges")
+    if edges:
+        for edge in edges:
+            yield edge
+
+
+def cursor(obj: any, field: str) -> str:
+    if not obj:
+        return None
+    edges = _path(obj, field, "edges")
+    return edges[-1]["cursor"] if edges else None
+
+
+def end_cursor(obj: any, field: str) -> str:
+    if not obj:
+        return None
+    return _path(obj, field, "pageInfo", "endCursor")
+
+# endregion helpers
+
+# region constructors
+
+def _make_author(obj: any) -> Author:
     return Author(
-        login=node["login"],
-        name=_path(node, "name"),
+        login=obj["login"],
+        name=_path(obj, "name"),
     )
 
 
-def _make_reaction(node: any) -> Reaction:
+def _make_reaction(edge: any) -> Reaction:
+    node = edge["node"]
     return Reaction(
         content=node["content"],
         author=_make_author(node["user"]),
@@ -341,26 +364,9 @@ def query_pr_comments(owner: str, repository: str, pr: int):
     )
 
 
-def edges(node: any, name: str) -> Iterator[any]:
-    for edge in _path(node, name, "edges"):
-        yield edge
-
-
-def cursor(node: any, name: str) -> str:
-    if not node:
-        return None
-    edges = _path(node, name, "edges")
-    return edges[-1]["cursor"] if edges else None
-
-
-def end_cursor(node: any, name: str) -> str:
-    if not node:
-        return ""
-    return _path(node, name, "pageInfo", "endCursor")
-
-
 def _make_comment(edge: any) -> Comment:
     node = edge["node"]
+    logging.debug(f"found comment {node['id']}")
     return Comment(
         id=node["id"],
         author=_make_author(node["author"]),
@@ -396,6 +402,7 @@ def _make_commit(edge: any) -> Commit:
 
 def _make_thread(edge: any) -> CodeThread:
     node = edge["node"]
+    logging.debug(f"found review thread {node}")
     return CodeThread(
         path=node["path"],
         resolved=node["isResolved"],
@@ -473,14 +480,15 @@ def graphql(token: str, query: str) -> any:
 def search_prs(
     token: str, owner: str, repository: str, branches: list[str] = []
 ) -> list[PR]:
-    prs: list[PR] = []
     if not branches:
-        return prs
+        return []
 
     heads = " ".join(f"head:{branch}" for branch in branches)
     next_page = lambda after: GQL_PRS_QUERY(owner, repository, heads, after)
 
-    Pages(None, "search", prs).append_all(token, make_pr, next_page)
+    prsPages = Pages(None, "search")
+    prsPages.append_all(token, make_pr, next_page)
+    prs = prsPages.data
 
     for pr in prs:
         if not pr.comments.complete():

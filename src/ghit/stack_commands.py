@@ -23,7 +23,7 @@ def _check_stack(
             depth = record.depth
 
 
-def check(args: Args):
+def check(args: Args)->None:
     repo, stack, _ = connect(args)
     for notsync in _check_stack(repo, stack):
         record, a = notsync
@@ -43,13 +43,15 @@ def check(args: Args):
 
     if not notsync:
         print(good("🗸 The stack is in shape."))
+    else:
+        raise BadResult("check")
 
 
 def restack(args: Args):
     repo, stack, _ = connect(args)
 
     for _ in _check_stack(repo, stack):
-        return
+        raise BadResult("restack")
 
     for record in stack.traverse(False):
         record_name = record.branch_name
@@ -90,14 +92,13 @@ def restack(args: Args):
         print(f"  Run `git rebase -i {parent_name} {record_name}`.")
 
 
-def stack_sync(args: Args):
+def stack_sync(args: Args)->None:
     repo, stack, gh = connect(args)
     if repo.is_empty:
         return
     origin = repo.remotes["origin"]
     if not origin:
-        print(warning("No origin found for the repository."))
-        return
+        raise BadResult("stack_sync", warning("No origin found for the repository."))
 
     mrc = MyRemoteCallback()
     print("Fetching from", origin.url)
@@ -109,7 +110,7 @@ def stack_sync(args: Args):
     for record in stack.traverse(False):
         sync_branch(repo, gh, origin, record)
 
-def dump(args:Args):
+def dump(args:Args)->None:
     _, stack, _ = connect(args)
     lines = []
     stack.dumps(lines)

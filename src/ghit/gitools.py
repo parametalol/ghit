@@ -34,7 +34,7 @@ def last_commits(
             break
 
 
-def checkout(repo: git.Repository, record: Stack):
+def checkout(repo: git.Repository, record: Stack)->None:
     branch_name = record.branch_name
     branch = repo.branches.get(branch_name) if branch_name else None
     if not branch:

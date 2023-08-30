@@ -124,21 +124,24 @@ class GH:
                     return False
         return True
 
-    def not_resolved(self, pr: PR) -> list[CodeThread]:
+    def unresolved(self, pr: PR) -> list[CodeThread]:
         result = [thread for thread in pr.threads.data if not thread.resolved]
 
         def author_reacted(thread: CodeThread) -> bool:
             if not thread.comments.data:
+                logging.debug(f"no comments?")
                 return False
             for reaction in thread.comments.data[-1].reactions.data:
-                if reaction.author.login == pr.author.login and reaction.content not in ["eyes", "confused"]:
+                if reaction.author.login == pr.author.login and reaction.content not in ["EYES", "CONFUSED"]:
+                    logging.debug(f"{thread.comments.data[-1].id} author reacted with {reaction.content}")
                     return True
+            logging.debug(f"author didn't react")
             return False
 
         def author_commented(thread: CodeThread) -> bool:
-            return (
-                thread.comments.data and thread.comments.data[-1].author.login == pr.author.login
-            )
+            commented = thread.comments.data and thread.comments.data[-1].author.login == pr.author.login
+            logging.debug(f"{thread.comments.data[-1].id} author {commented=}")
+            return commented
 
         return list(
             filter(
@@ -146,14 +149,20 @@ class GH:
             )
         )
 
-    def pr_info(self, args: Args, record: Stack) -> list[str]:
+    def pr_info(self, args: Args, record: Stack) -> tuple[list[str], dict[PR, CodeThread], dict[PR, Review]]:
         lines: list[str] = []
+        unresolved: dict[PR, list[CodeThread]] = {}
+        notapproved: dict[PR,list[Review]] = {}
         for pr in self.getPRs(record.branch_name):
             line = [pr_number_with_style(pr)]
-            nr = self.not_resolved(pr)
+            nr = self.unresolved(pr)
+            if nr:
+                unresolved[pr] = nr
             if not args.verbose and nr:
                 line.append(warning("!"))
             cr = [r for r in pr.reviews.data if r.state and r.state == "CHANGES_REQUESTED"]
+            if cr:
+                notapproved[pr] = cr
             if not args.verbose and cr:
                 line.append(danger("✗"))
             approved = [r for r in pr.reviews.data if r.state == "APPROVED"]
@@ -209,7 +218,7 @@ class GH:
                         vlines.append(f"  {colorful(review.url)}")
                 lines.extend(vlines)
 
-        return lines
+        return lines, unresolved, notapproved
 
     def _find_stack_comment(self, pr: PR) -> Comment | None:
         for comment in pr.comments.data:
