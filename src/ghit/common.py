@@ -61,3 +61,10 @@ def sync_branch(
             gh.update_pr(record, pr)
     else:
         gh.create_pr(record.get_parent().branch_name, record.branch_name, title, draft)
+
+class BadResult(Exception):
+    def __init__(self, command: str, message: str = "", level = warning, *args: object) -> None:
+        super().__init__(*args)
+        self.command = command
+        self.message = message
+        self.level = level

@@ -1,6 +1,7 @@
 import os
 import argparse
 import logging
+import sys
 
 from .common import *
 from .gitools import *
@@ -51,7 +52,7 @@ def add_branch_commands(parser: argparse.ArgumentParser):
     upr.add_argument("-d", "--draft", help="create draft PR", action="store_true")
     upr.set_defaults(func=branch_sync)
 
-def ghit(argv: list[str]):
+def ghit(argv: list[str])->int:
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--repository", default=".")
     parser.add_argument(
@@ -68,10 +69,20 @@ def ghit(argv: list[str]):
     args: Args = parser.parse_args(args=argv)
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
-    if args.debug:
-        args.func(args)
+        try:
+            args.func(args)
+        except BadResult as br:
+            if br.message:
+                print(br.message, file=sys.stderr)
+            return 1
     else:
         try:
             args.func(args)
+        except BadResult as br:
+            if br.message:
+                print(br.message, file=sys.stderr)
+            return 1
         except Exception as e:
             print("Error:", e)
+            return 2
+    return 0

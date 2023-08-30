@@ -4,8 +4,8 @@ import sys
 from .ghit import ghit
 
 
-def main():
-    ghit(sys.argv[1:])
+def main()->int:
+    return ghit(sys.argv[1:])
 
 
 if __name__ == "__main__":

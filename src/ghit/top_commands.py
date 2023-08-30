@@ -3,10 +3,12 @@ from .styling import *
 from .args import Args
 
 
-def ls(args: Args):
+def ls(args: Args)->None:
     repo, stack, gh = connect(args)
     if repo.is_empty:
         return
+
+    error = 0
 
     checked_out = get_current_branch(repo).branch_name
     parent_prefix: list[str] = []
@@ -29,9 +31,12 @@ def ls(args: Args):
             parent_prefix.append(parent_tab(record))
 
         if gh:
-            info = gh.pr_info(args, record)
+            info, nr, cr = gh.pr_info(args, record)
+            if nr or cr:
+                error = 1
             if len(info) == 1:
                 line.append(info[0])
+                print(" ".join(line))
             elif len(info) > 1:
                 print(" ".join(line))
                 for i in info:
@@ -41,8 +46,12 @@ def ls(args: Args):
                         "│   " if record.length() else "    ",
                         i,
                     )
-                continue
-        print(" ".join(line))
+            else:
+                print(" ".join(line))
+        else:
+            print(" ".join(line))
+    if error:
+        raise BadResult("ls")
 
 
 def _print_line(
@@ -90,7 +99,7 @@ def _print_line(
     return line
 
 
-def _move(args: Args, command: str):
+def _move(args: Args, command: str) -> None:
     repo, stack, _ = connect(args)
     current = get_current_branch(repo).branch_name
     i = stack.traverse()
@@ -111,18 +120,19 @@ def _move(args: Args, command: str):
         if record.branch_name != current:
             checkout(repo, record)
     else:
-        _jump(args, "top")
+        return _jump(args, "top")
+    return
 
 
-def up(args):
-    _move(args, "up")
+def up(args) -> None:
+    return _move(args, "up")
 
 
-def down(args):
-    _move(args, "down")
+def down(args) -> None:
+    return _move(args, "down")
 
 
-def _jump(args: Args, command: str):
+def _jump(args: Args, command: str) -> None:
     repo, stack, _ = connect(args)
     if command == "top":
         try:
@@ -134,11 +144,12 @@ def _jump(args: Args, command: str):
             pass
     if record and record.branch_name != get_current_branch(repo).branch_name:
         checkout(repo, record)
+    return
 
 
-def top(args):
-    _jump(args, "top")
+def top(args) -> None:
+    return _jump(args, "top")
 
 
-def bottom(args):
-    _jump(args, "bottom")
+def bottom(args) -> None:
+    return _jump(args, "bottom")
