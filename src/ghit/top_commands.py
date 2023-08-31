@@ -67,10 +67,14 @@ def _print_line(
     branch = repo.branches.get(record.branch_name)
     if record.get_parent():
         if branch:
-            behind, _ = repo.ahead_behind(
-                repo.branches[record.get_parent().branch_name].target,
-                branch.target,
-            )
+            parent = repo.lookup_branch(record.get_parent().branch_name)
+            if parent:
+                behind, _ = repo.ahead_behind(
+                    parent.target,
+                    branch.target,
+                )
+            else:
+                behind = 0
 
         g1 = "└" if record.is_last_child() else "├"
         g2 = "⭦" if behind else "─"
