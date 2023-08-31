@@ -124,11 +124,11 @@ def _move(args: Args, command: str) -> None:
     return
 
 
-def up(args) -> None:
+def up(args: Args) -> None:
     return _move(args, "up")
 
 
-def down(args) -> None:
+def down(args: Args) -> None:
     return _move(args, "down")
 
 
@@ -147,9 +147,24 @@ def _jump(args: Args, command: str) -> None:
     return
 
 
-def top(args) -> None:
+def top(args: Args) -> None:
     return _jump(args, "top")
 
 
-def bottom(args) -> None:
+def bottom(args: Args) -> None:
     return _jump(args, "bottom")
+
+def init(args: Args) -> None:
+    repo = git.Repository(args.repository)
+    repopath = os.path.dirname(os.path.abspath(repo.path))
+    filename = os.path.abspath(args.stack or os.path.join(repopath, ".ghit.stack"))
+    stack = open_stack(filename)
+    if stack:
+        return
+
+    if os.path.commonpath([filename, repopath]) == repopath and not repo.path_is_ignored(filename):
+        with open(os.path.join(repopath, ".gitignore"), "a") as gitignore:
+            gitignore.write(os.path.basename(filename)+"\n")
+
+    with open(filename, "w") as ghitstack:
+        ghitstack.write(get_current_branch(repo).branch_name + "\n")

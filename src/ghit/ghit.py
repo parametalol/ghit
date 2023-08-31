@@ -6,12 +6,18 @@ import sys
 from .common import *
 from .gitools import *
 from .styling import *
-from .top_commands import ls, up, down, top, bottom
+from .top_commands import ls, up, down, top, bottom, init
 from .stack_commands import check, restack, stack_sync, dump
 from .branch_commands import branch_sync
 
+
 def add_top_commands(parser: argparse.ArgumentParser):
     commands = parser.add_subparsers(required=True)
+
+    commands.add_parser(
+        "init",
+        help="create `.ghit.stack` file with the current branch, and add it to `.gitignore`",
+    ).set_defaults(func=init)
 
     commands.add_parser("ls", help="show the branches of stack with").set_defaults(
         func=ls
@@ -30,6 +36,7 @@ def add_top_commands(parser: argparse.ArgumentParser):
     ).set_defaults(func=bottom)
     return commands
 
+
 def add_stack_commands(parser: argparse.ArgumentParser):
     parser_stack_sub = parser.add_subparsers()
     parser_stack_sub.add_parser("check").set_defaults(func=check)
@@ -42,6 +49,7 @@ def add_stack_commands(parser: argparse.ArgumentParser):
         "sync", help="fetch from origin, push stack branches upstream and update PRs"
     ).set_defaults(func=stack_sync)
 
+
 def add_branch_commands(parser: argparse.ArgumentParser):
     parser_branch_sub = parser.add_subparsers()
     upr = parser_branch_sub.add_parser(
@@ -52,7 +60,8 @@ def add_branch_commands(parser: argparse.ArgumentParser):
     upr.add_argument("-d", "--draft", help="create draft PR", action="store_true")
     upr.set_defaults(func=branch_sync)
 
-def ghit(argv: list[str])->int:
+
+def ghit(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--repository", default=".")
     parser.add_argument(

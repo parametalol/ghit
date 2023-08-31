@@ -180,7 +180,7 @@ class GH:
             approved = [r for r in pr.reviews.data if r.state == "APPROVED"]
             if not args.verbose and not cr and approved:
                 line.append(good("✓"))
-            sync = self.is_sync(pr, record)
+            sync = self.is_sync(pr, record) if record.get_parent() else True
             if not args.verbose and not sync:
                 line.append(warning("⟳"))
             line.append(" ")
@@ -261,7 +261,7 @@ class GH:
         heads = [
             record.branch_name
             for record in self.stack.traverse()
-            if record.get_parent()
+            if record.get_parent() or not record.length()
         ]
         for pr in search_prs(self.token, self.owner, self.repository, heads):
             if pr.head not in prs:

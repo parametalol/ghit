@@ -14,7 +14,7 @@ def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
     repo = git.Repository(args.repository)
     if repo.is_empty:
         return repo, Stack(), None
-    stack = open_stack(args.stack)
+    stack = open_stack(args.stack or os.path.join(os.path.dirname(repo.path), ".ghit.stack"))
     if not stack:
         stack = Stack()
         current = get_current_branch(repo)
