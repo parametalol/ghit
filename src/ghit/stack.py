@@ -85,6 +85,8 @@ def open_stack(filename: str) -> Stack | None:
             enabled = not line.startswith("#")
             line = line.lstrip("#")
             branch_name = line.lstrip(".")
+            if not branch_name:
+                continue
             depth = len(line) - len(branch_name)
             logging.debug(
                 f"parsed: {'enabled' if enabled else 'disabled'} {branch_name} {depth}."

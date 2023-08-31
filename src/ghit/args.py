@@ -11,3 +11,4 @@ class Args:
     debug: bool
     verbose: bool
     draft: bool
+    branch: str

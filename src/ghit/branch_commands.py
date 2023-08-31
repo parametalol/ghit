@@ -18,3 +18,29 @@ def branch_sync(args: Args) -> None:
             "branch_sync", warning("Couldn't find current branch in the stack.")
         )
     return
+
+
+def create(args: Args) -> None:
+    repo, stack, _ = connect(args)
+    current = get_current_branch(repo)
+    for record in stack.traverse(True):
+        if record.branch_name == current.branch_name:
+            break
+    else:
+        record = stack.add_child(current.branch_name)
+    record = record.add_child(args.branch)
+
+    branch = repo.branches.local.create(
+        name=args.branch, commit=repo.get(repo.head.target)
+    )
+
+    origin = repo.remotes["origin"]
+    if origin:
+        update_upstream(repo, origin, branch)
+
+    checkout(repo, record)
+
+    lines = []
+    stack.dumps(lines)
+    with open(args.stack or stack_filename(repo), "w") as ghit_stack:
+        ghit_stack.write("\n".join(lines)+"\n")

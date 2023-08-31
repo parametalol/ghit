@@ -8,7 +8,7 @@ from .gitools import *
 from .styling import *
 from .top_commands import ls, up, down, top, bottom, init
 from .stack_commands import check, restack, stack_sync, dump
-from .branch_commands import branch_sync
+from .branch_commands import branch_sync, create
 
 
 def add_top_commands(parser: argparse.ArgumentParser):
@@ -60,6 +60,9 @@ def add_branch_commands(parser: argparse.ArgumentParser):
     upr.add_argument("-d", "--draft", help="create draft PR", action="store_true")
     upr.set_defaults(func=branch_sync)
 
+    cr = parser_branch_sub.add_parser("create", help="create branch, set remote upstream, update stack file")
+    cr.add_argument("branch", help="branch name to create")
+    cr.set_defaults(func=create)
 
 def ghit(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()

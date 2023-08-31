@@ -157,8 +157,8 @@ def bottom(args: Args) -> None:
 def init(args: Args) -> None:
     repo = git.Repository(args.repository)
     repopath = os.path.dirname(os.path.abspath(repo.path))
-    filename = os.path.abspath(args.stack or os.path.join(repopath, ".ghit.stack"))
-    stack = open_stack(filename)
+    filename = stack_filename(repo)
+    stack = open_stack(args.stack or filename)
     if stack:
         return
 

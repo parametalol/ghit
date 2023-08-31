@@ -7,6 +7,12 @@ from .args import Args
 
 __connections: tuple[git.Repository, Stack, GH] = None
 
+GHIT_STACK_FILENAME=".ghit.stack"
+
+def stack_filename(repo: git.Repository)->str:
+    repopath = os.path.dirname(os.path.abspath(repo.path))
+    return os.path.join(repopath, GHIT_STACK_FILENAME)
+
 def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
     global __connections
     if __connections:
@@ -14,7 +20,7 @@ def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
     repo = git.Repository(args.repository)
     if repo.is_empty:
         return repo, Stack(), None
-    stack = open_stack(args.stack or os.path.join(os.path.dirname(repo.path), ".ghit.stack"))
+    stack = open_stack(args.stack or stack_filename(repo))
     if not stack:
         stack = Stack()
         current = get_current_branch(repo)
