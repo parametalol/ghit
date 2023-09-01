@@ -3,8 +3,10 @@ import pygit2 as git
 from .styling import *
 from .stack import Stack
 
+
 def get_git_ssh_credentials() -> git.credentials.KeypairFromAgent:
     return git.KeypairFromAgent("git")
+
 
 class MyRemoteCallback(git.RemoteCallbacks):
     def push_update_reference(self, refname, message):
@@ -13,6 +15,7 @@ class MyRemoteCallback(git.RemoteCallbacks):
 
     def credentials(self, url, username_from_url, allowed_types):
         return get_git_ssh_credentials()
+
 
 def get_default_branch(repo: git.Repository) -> str:
     remote_head = repo.references["refs/remotes/origin/HEAD"].resolve().shorthand
@@ -26,20 +29,18 @@ def get_current_branch(repo: git.Repository) -> git.Branch:
 def last_commits(
     repo: git.Repository, target: git.Oid, n: int = 1
 ) -> Iterator[git.Commit]:
-    i = 0
-    for commit in repo.walk(target):
+    for i, commit in enumerate(repo.walk(target), start=1):
         yield commit
-        i += 1
         if i >= n:
             break
 
 
-def checkout(repo: git.Repository, record: Stack)->None:
+def checkout(repo: git.Repository, record: Stack) -> None:
     branch_name = record.branch_name
     branch = repo.branches.get(branch_name) if branch_name else None
     if not branch:
         print(danger("Error:"), emphasis(branch_name), danger("not found in local."))
-        remote = repo.branches.remote["origin/"+branch_name]
+        remote = repo.branches.remote["origin/" + branch_name]
         if remote:
             print(f"There is though a remote branch {emphasis(remote.branch_name)}.")
         return
@@ -49,7 +50,9 @@ def checkout(repo: git.Repository, record: Stack)->None:
         parent_branch = repo.branches[record.get_parent().branch_name]
         a, _ = repo.ahead_behind(parent_branch.target, branch.target)
         if a:
-            print(f"This branch has fallen back behind {emphasis(record.get_parent().branch_name)}.")
+            print(
+                f"This branch has fallen back behind {emphasis(record.get_parent().branch_name)}."
+            )
             print("You may want to restack to pick up the following commits:")
             for commit in last_commits(repo, parent_branch.target, a):
                 print(

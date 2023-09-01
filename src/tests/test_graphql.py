@@ -1,5 +1,4 @@
 import unittest
-import logging
 from dataclasses import dataclass
 from ghit.graphql import *
 
@@ -103,8 +102,6 @@ class TestGraphQL(unittest.TestCase):
                 subclasses=Pages("subClasses", make_tsc, node),
             )
 
-        logging.getLogger().setLevel(logging.DEBUG)
-
         tcs = Pages("search", make_tc)
         tcs.append_all(lambda c: response["data"])
         self.assertEqual(1, len(tcs.data))
@@ -177,7 +174,7 @@ class TestGraphQL(unittest.TestCase):
                     {
                         "cursor": "B",
                         "node": {"value": "subtest two"},
-                    }
+                    },
                 ],
             },
         }
@@ -188,10 +185,3 @@ class TestGraphQL(unittest.TestCase):
         data["subClasses"]["pageInfo"]["hasNextPage"] = True
         c, has_next = end_cursor(data, "subClasses")
         self.assertTrue(has_next)
-    
-    
-        
-
-
-if __name__ == "__main__":
-    unittest.main()
