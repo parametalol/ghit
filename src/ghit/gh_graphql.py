@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from typing import Callable
+import requests
 from .graphql import *
 
 # region query
@@ -40,129 +42,104 @@ GQL_PR = fields(
     paged("commits", FIRST_FEW, GQL_COMMIT),
 )
 
+
+def first_n_after(name: str, q: str, n: int, after: str, **opts):
+    return paged(name, {"first": n, "after": cursor_or_null(after), **opts}, q)
+
+
 GQL_PRS_QUERY = lambda owner, repository, heads, after=None: query(
     "query search_prs",
-    paged(
+    first_n_after(
         "search",
-        {
-            **FIRST_FEW,
-            "after": cursor_or_null(after),
-            "type": "ISSUE",
-            "query": f'"repo:{owner}/{repository} is:pr {heads}"',
-        },
         on("PullRequest", GQL_PR),
+        10,
+        after,
+        type="ISSUE",
+        query=f'"repo:{owner}/{repository} is:pr {heads}"',
     ),
 )
 
 
-def pr_details_query(detail: str, obj: str):
-    return lambda owner, repository, pr_number, after=None: query(
-        f"query pr_{detail}",
-        func(
-            "repository",
-            {"owner": f'"{owner}"', "name": f'"{repository}"'},
+def pr_details_query(name: str, detail: Callable[..., str]):
+    def q(owner: str, repository: str, pr_number: int, *after: str):
+        return query(
+            f"query {name}",
             func(
-                "pullRequest",
-                {"number": pr_number},
-                paged(detail, {**FIRST_FEW, "after": cursor_or_null(after)}, obj),
+                "repository",
+                {"owner": f'"{owner}"', "name": f'"{repository}"'},
+                func("pullRequest", {"number": pr_number}, detail(*after)),
             ),
-        ),
-    )
+        )
+
+    return q
 
 
-GQL_PR_COMMENTS_QUERY = pr_details_query("comments", GQL_COMMENT)
-
-GQL_PR_COMMENT_REACTIONS_QUERY = (
-    lambda owner, repository, pr_number, comment_cursor=None, after=None: query(
-        f"query pr_comments_reactions",
-        func(
-            "repository",
-            {"owner": f'"{owner}"', "name": f'"{repository}"'},
-            func(
-                "pullRequest",
-                {"number": pr_number},
-                paged(
-                    "comments",
-                    {"first": 1, "after": cursor_or_null(comment_cursor)},
-                    paged(
-                        "reactions", {**FIRST_FEW, "after": cursor_or_null(after)}, obj
-                    ),
-                ),
-            ),
-        ),
-    )
+GQL_PR_COMMENTS_QUERY = pr_details_query(
+    "pr_comments", lambda after: first_n_after("comments", GQL_COMMENT, 10, after)
 )
 
-GQL_PR_THREADS_QUERY = pr_details_query("reviewThreads", GQL_REVIEW_THREAD)
-GQL_PR_THREAD_COMMENTS_QUERY = lambda owner, repository, pr_number, thread_cursor=None, comment_cursor=None, after=None: query(
-    f"query pr_threads_comments",
-    func(
-        "repository",
-        {"owner": f'"{owner}"', "name": f'"{repository}"'},
-        func(
-            "pullRequest",
-            {"number": pr_number},
-            paged(
-                "reviewThreads",
-                {"first": 1, "after": cursor_or_null(thread_cursor)},
-                paged(
-                    "comments",
-                    {**FIRST_FEW, "after": cursor_or_null(comment_cursor)},
-                    paged(
-                        "reactions", {**FIRST_FEW, "after": cursor_or_null(after)}, obj
-                    ),
-                ),
-            ),
-        ),
+GQL_PR_COMMENT_REACTIONS_QUERY = pr_details_query(
+    "pr_comments_reactions",
+    lambda comment_cursor, after: first_n_after(
+        "comments",
+        first_n_after("reactions", GQL_REACTION, 10, after),
+        1,
+        comment_cursor,
     ),
 )
 
-GQL_PR_COMMITS_QUERY = pr_details_query("commits", GQL_COMMIT)
-GQL_PR_COMMIT_COMMENTS_QUERY = lambda owner, repository, pr_number, commit_cursor=None, comment_cursor=None, after=None: query(
-    f"query pr_threads_comments",
-    func(
-        "repository",
-        {"owner": f'"{owner}"', "name": f'"{repository}"'},
-        func(
-            "pullRequest",
-            {"number": pr_number},
-            paged(
-                "commits",
-                {"first": 1, "after": cursor_or_null(commit_cursor)},
-                paged(
-                    "comments",
-                    {**FIRST_FEW, "after": cursor_or_null(comment_cursor)},
-                    paged(
-                        "reactions", {**FIRST_FEW, "after": cursor_or_null(after)}, obj
-                    ),
-                ),
-            ),
+GQL_PR_THREADS_QUERY = pr_details_query(
+    "pr_reviewThreads",
+    lambda after: first_n_after("reviewThreads", GQL_REVIEW_THREAD, 10, after),
+)
+
+GQL_PR_THREAD_COMMENTS_QUERY = pr_details_query(
+    "pr_thread_comments",
+    lambda thread_cursor, comment_cursor, after: first_n_after(
+        "reviewThreads",
+        first_n_after(
+            "comments",
+            first_n_after("reactions", GQL_REACTION, 10, after),
+            1,
+            comment_cursor,
         ),
+        1,
+        thread_cursor,
     ),
 )
-GQL_PR_COMMIT_COMMENT_REACTIONS_QUERY = lambda owner, repository, pr_number, commit_cursor=None, comment_cursor=None, after=None: query(
-    f"query pr_threads_comments",
-    func(
-        "repository",
-        {"owner": f'"{owner}"', "name": f'"{repository}"'},
-        func(
-            "pullRequest",
-            {"number": pr_number},
-            paged(
-                "commits",
-                {"first": 1, "after": cursor_or_null(commit_cursor)},
-                paged(
-                    "comments",
-                    {"first": 1, "after": cursor_or_null(comment_cursor)},
-                    paged(
-                        "reactions", {**FIRST_FEW, "after": cursor_or_null(after)}, obj
-                    ),
-                ),
-            ),
-        ),
+
+GQL_PR_COMMITS_QUERY = pr_details_query(
+    "pr_commits", lambda after: first_n_after("commits", GQL_COMMIT, 10, after)
+)
+
+GQL_PR_COMMIT_COMMENTS_QUERY = pr_details_query(
+    "pr_threads_comments",
+    lambda commit_cursor, after: first_n_after(
+        "commits",
+        first_n_after("comments", GQL_COMMENT, 10, after),
+        1,
+        commit_cursor,
     ),
 )
-GQL_PR_REVIEWS_QUERY = pr_details_query("reviews", GQL_REVIEW)
+
+GQL_PR_COMMIT_COMMENT_REACTIONS_QUERY = pr_details_query(
+    "pr_threads_comments",
+    lambda commit_cursor, comment_cursor, after: first_n_after(
+        "commits",
+        first_n_after(
+            "comments",
+            first_n_after("reactions", GQL_REACTION, 10, after),
+            1,
+            comment_cursor,
+        ),
+        1,
+        commit_cursor,
+    ),
+)
+
+GQL_PR_REVIEWS_QUERY = pr_details_query(
+    "pr_reviews", lambda after: first_n_after("reviews", GQL_REVIEW, 10, after)
+)
 
 GQL_GET_REPO_ID = lambda owner, repository: query(
     "query get_repo_id",

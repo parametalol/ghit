@@ -1,5 +1,3 @@
-import requests
-import sys
 import logging
 from typing import TypeVar, Generic, Callable
 from collections.abc import Iterator

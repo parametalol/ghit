@@ -124,7 +124,7 @@ class GH:
                     return False
         return True
 
-    def unresolved(self, pr: PR) -> list[ReviewThread]:
+    def unresolved(self, pr: PR) -> dict[Author, list[Comment]]:
         result = [thread for thread in pr.threads.data if not thread.resolved]
 
         def author_reacted(thread: ReviewThread) -> bool:
@@ -151,11 +151,16 @@ class GH:
             logging.debug(f"{thread.comments.data[-1].id} author {commented=}")
             return commented
 
-        return list(
-            filter(
+        comments: dict[Author, list[Comment]] = {}
+        for thread in filter(
                 lambda cd: not author_commented(cd) and not author_reacted(cd), result
-            )
-        )
+            ):
+            for c in thread.comments.data:
+                if c.author in comments:
+                    comments[c.author].append(c)
+                else:
+                    comments[c.author] = [c]
+        return comments
 
     def pr_info(
         self, args: Args, record: Stack
@@ -213,16 +218,26 @@ class GH:
                                     )
                                 )
                 if nr:
-                    for thread in nr:
-                        for c in thread.comments.data:
+                    for author, comments in nr.items():
+                        if len(comments) == 1:
                             vlines.append(
                                 with_style(
                                     "dim", warning("! No reaction to a comment by ")
                                 )
-                                + with_style("italic", warning(str(c.author)))
+                                + with_style("italic", warning(str(author)))
                                 + with_style("dim", warning(":")),
                             )
-                            vlines.append(f"  {colorful(c.url)}")
+                            vlines.append(f"  {colorful(comments[0].url)}")
+                        else:
+                            vlines.append(
+                                with_style(
+                                    "dim", warning("! No reaction to comments by ")
+                                )
+                                + with_style("italic", warning(str(author)))
+                                + with_style("dim", warning(":")),
+                            )
+                            for i, comment in enumerate(comments, start = 1):
+                                vlines.append("  "+warning(f"{i}.") + " "+ colorful(comment.url))
                 if cr:
                     for review in cr:
                         vlines.append(
