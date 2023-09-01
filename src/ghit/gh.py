@@ -8,7 +8,7 @@ from urllib.parse import ParseResult
 from .styling import *
 from .stack import *
 from .args import Args
-from .graphql import *
+from .gh_graphql import *
 
 GH_SCHEME = "git@github.com:"
 

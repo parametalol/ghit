@@ -100,9 +100,9 @@ class TestGraphQL(unittest.TestCase):
             node = edge["node"]
             return TestClass(
                 node["value"],
-                subclasses=Pages("subClasses", 
-                                 make_tsc, node),
+                subclasses=Pages("subClasses", make_tsc, node),
             )
+
         logging.getLogger().setLevel(logging.DEBUG)
 
         tcs = Pages("search", make_tc)
@@ -137,6 +137,60 @@ class TestGraphQL(unittest.TestCase):
         )
         self.assertEqual(2, len(tcs.data[0].subclasses.data))
         self.assertEqual("subtest two", tcs.data[0].subclasses.data[1].value)
+
+    def test_path(self):
+        self.assertEqual("abc", path({"a": "abc"}, "a"))
+        self.assertEqual("abc", path(["abc"], 0))
+        self.assertEqual("abc", path({"a": {"b": ["x", "y", "abc"]}}, "a", "b", -1))
+
+    def test_edges(self):
+        data = {
+            "subClasses": {
+                "pageInfo": {
+                    "endCursor": "C",
+                    "hasNextPage": False,
+                },
+                "edges": [
+                    {
+                        "cursor": "C",
+                        "node": {"value": "subtest two"},
+                    }
+                ],
+            },
+        }
+
+        e = next(edges(data, "subClasses"))
+        self.assertEqual("C", e["cursor"])
+
+    def test_cursor(self):
+        data = {
+            "subClasses": {
+                "pageInfo": {
+                    "endCursor": "C",
+                    "hasNextPage": False,
+                },
+                "edges": [
+                    {
+                        "cursor": "A",
+                        "node": {"value": "subtest two"},
+                    },
+                    {
+                        "cursor": "B",
+                        "node": {"value": "subtest two"},
+                    }
+                ],
+            },
+        }
+        self.assertEqual("B", last_edge_cursor(data, "subClasses"))
+        c, has_next = end_cursor(data, "subClasses")
+        self.assertEqual("C", c)
+        self.assertFalse(has_next)
+        data["subClasses"]["pageInfo"]["hasNextPage"] = True
+        c, has_next = end_cursor(data, "subClasses")
+        self.assertTrue(has_next)
+    
+    
+        
 
 
 if __name__ == "__main__":
