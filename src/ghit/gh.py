@@ -124,10 +124,10 @@ class GH:
                     return False
         return True
 
-    def unresolved(self, pr: PR) -> list[CodeThread]:
+    def unresolved(self, pr: PR) -> list[ReviewThread]:
         result = [thread for thread in pr.threads.data if not thread.resolved]
 
-        def author_reacted(thread: CodeThread) -> bool:
+        def author_reacted(thread: ReviewThread) -> bool:
             if not thread.comments.data:
                 logging.debug(f"no comments?")
                 return False
@@ -143,7 +143,7 @@ class GH:
             logging.debug(f"author didn't react")
             return False
 
-        def author_commented(thread: CodeThread) -> bool:
+        def author_commented(thread: ReviewThread) -> bool:
             commented = (
                 thread.comments.data
                 and thread.comments.data[-1].author.login == pr.author.login
@@ -159,9 +159,9 @@ class GH:
 
     def pr_info(
         self, args: Args, record: Stack
-    ) -> tuple[list[str], dict[PR, CodeThread], dict[PR, Review]]:
+    ) -> tuple[list[str], dict[PR, ReviewThread], dict[PR, Review]]:
         lines: list[str] = []
-        unresolved: dict[PR, list[CodeThread]] = {}
+        unresolved: dict[PR, list[ReviewThread]] = {}
         notapproved: dict[PR, list[Review]] = {}
         for pr in self.getPRs(record.branch_name):
             line = [pr_number_with_style(pr)]

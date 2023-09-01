@@ -14,12 +14,12 @@ def fields(*f: str) -> str:
     return " ".join(f)
 
 
-def on(t: str, *f) -> str:
-    return obj(f"... on {t}", *f)
-
-
 def obj(name: str, *f: str) -> str:
     return name + "{ " + fields(*f) + " }"
+
+
+def on(t: str, *f) -> str:
+    return obj(f"... on {t}", *f)
 
 
 query = obj
@@ -139,7 +139,74 @@ GQL_PR_COMMENT_REACTIONS_QUERY = (
 )
 
 GQL_PR_THREADS_QUERY = pr_details_query("reviewThreads", GQL_REVIEW_THREAD)
+GQL_PR_THREAD_COMMENTS_QUERY = lambda owner, repository, pr_number, thread_cursor=None, comment_cursor=None, after=None: query(
+    f"query pr_threads_comments",
+    func(
+        "repository",
+        {"owner": f'"{owner}"', "name": f'"{repository}"'},
+        func(
+            "pullRequest",
+            {"number": pr_number},
+            paged(
+                "reviewThreads",
+                {"first": 1, "after": cursor_or_null(thread_cursor)},
+                paged(
+                    "comments",
+                    {**FIRST_FEW, "after": cursor_or_null(comment_cursor)},
+                    paged(
+                        "reactions", {**FIRST_FEW, "after": cursor_or_null(after)}, obj
+                    ),
+                ),
+            ),
+        ),
+    ),
+)
+
 GQL_PR_COMMITS_QUERY = pr_details_query("commits", GQL_COMMIT)
+GQL_PR_COMMIT_COMMENTS_QUERY = lambda owner, repository, pr_number, commit_cursor=None, comment_cursor=None, after=None: query(
+    f"query pr_threads_comments",
+    func(
+        "repository",
+        {"owner": f'"{owner}"', "name": f'"{repository}"'},
+        func(
+            "pullRequest",
+            {"number": pr_number},
+            paged(
+                "commits",
+                {"first": 1, "after": cursor_or_null(commit_cursor)},
+                paged(
+                    "comments",
+                    {**FIRST_FEW, "after": cursor_or_null(comment_cursor)},
+                    paged(
+                        "reactions", {**FIRST_FEW, "after": cursor_or_null(after)}, obj
+                    ),
+                ),
+            ),
+        ),
+    ),
+)
+GQL_PR_COMMIT_COMMENT_REACTIONS_QUERY = lambda owner, repository, pr_number, commit_cursor=None, comment_cursor=None, after=None: query(
+    f"query pr_threads_comments",
+    func(
+        "repository",
+        {"owner": f'"{owner}"', "name": f'"{repository}"'},
+        func(
+            "pullRequest",
+            {"number": pr_number},
+            paged(
+                "commits",
+                {"first": 1, "after": cursor_or_null(commit_cursor)},
+                paged(
+                    "comments",
+                    {"first": 1, "after": cursor_or_null(comment_cursor)},
+                    paged(
+                        "reactions", {**FIRST_FEW, "after": cursor_or_null(after)}, obj
+                    ),
+                ),
+            ),
+        ),
+    ),
+)
 GQL_PR_REVIEWS_QUERY = pr_details_query("reviews", GQL_REVIEW)
 
 GQL_GET_REPO_ID = lambda owner, repository: query(
@@ -193,33 +260,30 @@ GQL_UPDATE_PR_BASE = lambda pr_input: query(
 class Pages(Generic[T]):
     def __init__(
         self,
-        node: any,
         name: str,
-        response_path: list[str] = [],
-        data: list[T] | None = None,
+        page_maker: Callable[[any], T],
+        node: any = None,
     ) -> None:
         super().__init__()
         self.name = name
-        self.page_response_path = response_path
+        self.page_maker = page_maker
         self.next_cursor: str = cursor(node, name)
         self.end_cursor, self.has_next_page = (
             end_cursor(node, name) if node else (None, True)
         )
-        self.data = list(data) if data else []
+        self.data = list(map(page_maker, edges(node, name))) if node else []
 
     def complete(self) -> bool:
         return self.next_cursor == self.end_cursor and not self.has_next_page
 
-    def append_all(self, token: str, maker: Callable[[any], T], next_page):
+    def append_all(self, next_page):
         logging.debug(
             f"querying all {self.name} {self.next_cursor=}, {self.end_cursor=}, {self.has_next_page=}"
         )
         while not self.complete():
-            logging.debug(
-                f"querying {self.name} after cursor {self.next_cursor} for {self.page_response_path}"
-            )
-            response = graphql(token, next_page(self.next_cursor))
-            data = _path(response, "data", *self.page_response_path)
+            logging.debug(f"querying {self.name} after cursor {self.next_cursor}")
+            data = next_page(self.next_cursor)
+            logging.debug(f"{data=}")
             if not data:
                 raise Exception("GitHub GraphQL: No data in response")
             self.end_cursor, self.has_next_page = end_cursor(data, self.name)
@@ -227,7 +291,7 @@ class Pages(Generic[T]):
                 f"end cursor {self.end_cursor}, has next page {self.has_next_page}"
             )
 
-            new_data = list(map(maker, edges(data, self.name)))
+            new_data = list(map(self.page_maker, edges(data, self.name)))
             logging.debug(f"found new data of {len(new_data)}")
             self.data.extend(new_data)
             self.next_cursor = cursor(data, self.name)
@@ -266,11 +330,12 @@ class Comment:
 
 
 @dataclass
-class CodeThread:
+class ReviewThread:
     path: str
     resolved: bool
     outdated: bool
     comments: Pages[Comment]
+    cursor: str
 
 
 @dataclass
@@ -283,6 +348,7 @@ class Review:
 @dataclass
 class Commit:
     comments: Pages[Comment]
+    cursor: str
 
 
 @dataclass
@@ -298,7 +364,7 @@ class PR:
     draft: bool
     base: str
     head: str
-    threads: Pages[CodeThread]
+    threads: Pages[ReviewThread]
     comments: Pages[Comment]
     reviews: Pages[Review]
     commits: Pages[Commit]
@@ -311,7 +377,7 @@ class PR:
 
 
 # region helpers
-def _path(obj: any, *keys: str) -> any:
+def _path(obj: any, *keys: str | int) -> any:
     for k in keys:
         if k in obj:
             obj = obj[k]
@@ -378,7 +444,7 @@ def query_pr_comments(owner: str, repository: str, pr: int):
     )
 
 
-def __make_comment(edge: any, page: list[str]) -> Comment:
+def _make_comment(edge: any) -> Comment:
     logging.debug(f"found comment: {edge}")
     node = edge["node"]
     return Comment(
@@ -387,18 +453,9 @@ def __make_comment(edge: any, page: list[str]) -> Comment:
         body=node["body"],
         reacted=False,
         url=node["url"],
-        reactions=Pages(
-            node,
-            "reactions",
-            page,
-            map(_make_reaction, edges(node, "reactions")),
-        ),
+        reactions=Pages("reactions", _make_reaction, node),
         cursor=edge["cursor"],
     )
-
-
-def _make_comment(page: list[str]):
-    return lambda n: __make_comment(n, page)
 
 
 def _make_review(edge: any) -> Review:
@@ -412,33 +469,19 @@ def _make_review(edge: any) -> Review:
 def _make_commit(edge: any) -> Commit:
     node = edge["node"]
     return Commit(
-        comments=Pages(
-            node,
-            "comments",
-            ["repository", "pullRequest", "commit"],
-            map(
-                _make_comment(["repository", "pullRequest", "commit", "comment"]),
-                edges(node, "comments"),
-            ),
-        ),
+        comments=Pages("comments", _make_comment, node),
+        cursor=edge["cursor"],
     )
 
 
-def _make_thread(edge: any) -> CodeThread:
+def _make_thread(edge: any) -> ReviewThread:
     node = edge["node"]
-    return CodeThread(
+    return ReviewThread(
         path=node["path"],
         resolved=node["isResolved"],
         outdated=node["isOutdated"],
-        comments=Pages(
-            node,
-            "comments",
-            ["repository", "pullRequest", "reviewThread"],
-            map(
-                _make_comment(["repository", "pullRequest", "reviewThread", "comment"]),
-                edges(node, "comments"),
-            ),
-        ),
+        comments=Pages("comments", _make_comment, node),
+        cursor=edge["cursor"],
     )
 
 
@@ -456,30 +499,10 @@ def make_pr(edge: any) -> PR:
         state=node["state"],
         base=node["baseRefName"],
         head=node["headRefName"],
-        comments=Pages(
-            node,
-            "comments",
-            ["repository", "pullRequest"],
-            map(_make_comment(["repository", "pullRequest", "comment"]), edges(node, "comments")),
-        ),
-        threads=Pages(
-            node,
-            "reviewThreads",
-            ["repository", "pullRequest"],
-            map(_make_thread, edges(node, "reviewThreads")),
-        ),
-        reviews=Pages(
-            node,
-            "reviews",
-            ["repository", "pullRequest"],
-            map(_make_review, edges(node, "reviews")),
-        ),
-        commits=Pages(
-            node,
-            "commits",
-            ["repository", "pullRequest"],
-            map(_make_commit, edges(node, "commits")),
-        ),
+        comments=Pages("comments", _make_comment, node),
+        threads=Pages("reviewThreads", _make_thread, node),
+        reviews=Pages("reviews", _make_review, node),
+        commits=Pages("commits", _make_commit, node),
     )
 
 
@@ -523,42 +546,147 @@ def search_prs(
         return []
 
     heads = " ".join(f"head:{branch}" for branch in branches)
-    next_page = lambda after: GQL_PRS_QUERY(owner, repository, heads, after)
 
-    empty: list[PR] = None
-    prsPages = Pages(None, "search", [], empty)
-    prsPages.append_all(token, make_pr, next_page)
+    prsPages = Pages("search", make_pr)
+    prsPages.append_all(
+        lambda after: _path(
+            graphql(token, GQL_PRS_QUERY(owner, repository, heads, after)), "data"
+        )
+    )
     prs = prsPages.data
-
+    pr_path = ["data", "repository", "pullRequest"]
     for pr in prs:
         if not pr.comments.complete():
-            next_page = lambda after: GQL_PR_COMMENTS_QUERY(
-                owner, repository, pr.number, after
+            pr.comments.append_all(
+                lambda after: _path(
+                    graphql(
+                        token,
+                        GQL_PR_COMMENTS_QUERY(owner, repository, pr.number, after),
+                    ),
+                    *pr_path,
+                )
             )
-            pr.comments.append_all(token, _make_comment, next_page)
-            for comment in pr.comments.data:
-                if not comment.reactions.complete():
-                    next_page = lambda after: GQL_PR_COMMENT_REACTIONS_QUERY(
-                        owner, repository, pr.number, comment.cursor, after
-                    )
-                    comment.reactions.append_all(token, _make_reaction, next_page)
 
         if not pr.threads.complete():
-            next_page = lambda after: GQL_PR_THREADS_QUERY(
-                owner, repository, pr.number, after
+            pr.threads.append_all(
+                lambda after: _path(
+                    graphql(
+                        token, GQL_PR_THREADS_QUERY(owner, repository, pr.number, after)
+                    ),
+                    *pr_path,
+                )
             )
-            pr.threads.append_all(token, _make_comment, next_page)
+
         if not pr.reviews.complete():
-            logging.debug(f"reviews not complete... {len(pr.reviews.data)}")
-            next_page = lambda after: GQL_PR_REVIEWS_QUERY(
-                owner, repository, pr.number, after
+            pr.reviews.append_all(
+                lambda after: _path(
+                    graphql(
+                        token, GQL_PR_REVIEWS_QUERY(owner, repository, pr.number, after)
+                    ),
+                    *pr_path,
+                )
             )
-            pr.reviews.append_all(token, _make_review, next_page)
-            logging.debug(f"reviews complete {len(pr.reviews.data)}")
 
         if not pr.commits.complete():
-            next_page = lambda after: GQL_PR_COMMITS_QUERY(
-                owner, repository, pr.number, after
+            pr.commits.append_all(
+                lambda after: _path(
+                    graphql(
+                        token, GQL_PR_COMMITS_QUERY(owner, repository, pr.number, after)
+                    ),
+                    *pr_path,
+                )
             )
-            pr.commits.append_all(token, _make_commit, next_page)
+
+    for pr in prs:
+        for comment in pr.comments.data:
+            if not comment.reactions.complete():
+                comment.reactions.append_all(
+                    lambda after: _path(
+                        graphql(
+                            token,
+                            GQL_PR_COMMENT_REACTIONS_QUERY(
+                                owner, repository, pr.number, comment.cursor, after
+                            ),
+                            *pr_path,
+                            "comments",
+                        )
+                    )
+                )
+        for thread in pr.threads.data:
+            if not thread.comments.complete():
+                pr.comments.append_all(
+                    lambda after: _path(
+                        graphql(
+                            token,
+                            GQL_PR_THREAD_COMMENTS_QUERY(
+                                owner, repository, pr.number, thread.cursor, after
+                            ),
+                        ),
+                        *pr_path,
+                        "reviewThreads",
+                        "edges",
+                        0,
+                        "node",
+                        "comments",
+                    )
+                )
+
+        for commit in pr.commits.data:
+            pr.comments.append_all(
+                lambda after: _path(
+                    graphql(
+                        token,
+                        GQL_PR_COMMIT_COMMENTS_QUERY(
+                            owner, repository, pr.number, after
+                        ),
+                    ),
+                    *pr_path,
+                    "commits",
+                    "edges",
+                    0,
+                    "node",
+                    "comments",
+                ),
+            )
+
+    for pr in prs:
+        for thread in pr.threads.data:
+            for comment in thread.comments.data:
+                if not comment.reactions.complete():
+                    comment.reactions.append_all(
+                        lambda after: _path(
+                            GQL_PR_COMMENT_REACTIONS_QUERY(
+                                owner, repository, pr.number, comment.cursor, after
+                            ),
+                            *pr_path,
+                            "comments",
+                            "edges",
+                            0,
+                            "reactions",
+                        )
+                    )
+
+        for commit in pr.commits.data:
+            for comment in commit.comments.data:
+                if not comment.reactions.complete():
+                    comment.reactions.append_all(
+                        lambda after: _path(
+                            GQL_PR_COMMIT_COMMENT_REACTIONS_QUERY(
+                                owner,
+                                repository,
+                                pr.number,
+                                commit.cursor,
+                                comment.cursor,
+                                after,
+                            ),
+                            *pr_path,
+                            "commits",
+                            "edges",
+                            0,
+                            "comments",
+                            "edges",
+                            0,
+                            "reactions",
+                        )
+                    )
     return prs
