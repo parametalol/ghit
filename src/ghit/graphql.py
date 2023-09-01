@@ -34,7 +34,7 @@ def paged(name: str, args: dict[str, str], *f: str) -> str:
     return func(
         name,
         args,
-        obj("pageInfo", "endCursor"),
+        obj("pageInfo", "endCursor", "hasNextPage"),
         obj("edges", "cursor", obj("node", *f)),
     )
 
@@ -159,9 +159,7 @@ def input(**args) -> dict[str, str]:
 
 GQL_ADD_COMMENT = lambda comment_input: query(
     "mutation add_pr_comment",
-    func(
-        "addComment", comment_input, "clientMutationId"
-    ),
+    func("addComment", comment_input, "clientMutationId"),
 )
 GQL_UPDATE_COMMENT = lambda comment_input: query(
     "mutation update_pr_comment",
@@ -193,32 +191,45 @@ GQL_UPDATE_PR_BASE = lambda pr_input: query(
 
 
 class Pages(Generic[T]):
-    def __init__(self, node: any, name: str, data: list[T] | None = None) -> None:
+    def __init__(
+        self,
+        node: any,
+        name: str,
+        response_path: list[str] = [],
+        data: list[T] | None = None,
+    ) -> None:
         super().__init__()
         self.name = name
+        self.page_response_path = response_path
         self.next_cursor: str = cursor(node, name)
-        self.end_cursor: str = end_cursor(node, name)
+        self.end_cursor, self.has_next_page = (
+            end_cursor(node, name) if node else (None, True)
+        )
         self.data = list(data) if data else []
-        self._never_queried = data is None
 
     def complete(self) -> bool:
-        return self.next_cursor == self.end_cursor and not self._never_queried
+        return self.next_cursor == self.end_cursor and not self.has_next_page
 
     def append_all(self, token: str, maker: Callable[[any], T], next_page):
         logging.debug(
-            f"querying all {self.name} {self._never_queried=}, {self.next_cursor=}, {self.end_cursor=}"
+            f"querying all {self.name} {self.next_cursor=}, {self.end_cursor=}, {self.has_next_page=}"
         )
         while not self.complete():
-            logging.debug(f"querying {self.name} after cursor {self.next_cursor}")
+            logging.debug(
+                f"querying {self.name} after cursor {self.next_cursor} for {self.page_response_path}"
+            )
             response = graphql(token, next_page(self.next_cursor))
-            if "data" not in response:
+            data = _path(response, "data", *self.page_response_path)
+            if not data:
                 raise Exception("GitHub GraphQL: No data in response")
-            data = response["data"]
-            self._never_queried = False
-            if not self.end_cursor:
-                self.end_cursor = end_cursor(data, self.name)
-                logging.debug(f"end cursor {self.end_cursor}")
-            self.data.extend(map(maker, edges(data, self.name)))
+            self.end_cursor, self.has_next_page = end_cursor(data, self.name)
+            logging.debug(
+                f"end cursor {self.end_cursor}, has next page {self.has_next_page}"
+            )
+
+            new_data = list(map(maker, edges(data, self.name)))
+            logging.debug(f"found new data of {len(new_data)}")
+            self.data.extend(new_data)
             self.next_cursor = cursor(data, self.name)
         logging.debug(f"queried all {self.name}")
 
@@ -232,6 +243,9 @@ class Author:
         if self.name and self.login:
             return f"{self.name} ({self.login})"
         return self.name or self.login
+
+    def __hash__(self) -> int:
+        return hash(self.login)
 
 
 @dataclass
@@ -320,10 +334,12 @@ def cursor(obj: any, field: str) -> str:
     return edges[-1]["cursor"] if edges else None
 
 
-def end_cursor(obj: any, field: str) -> str:
+def end_cursor(obj: any, field: str) -> tuple[str, bool]:
     if not obj:
-        return None
-    return _path(obj, field, "pageInfo", "endCursor")
+        return None, False
+    return _path(obj, field, "pageInfo", "endCursor"), bool(
+        _path(obj, field, "pageInfo", "hasNextPage")
+    )
 
 
 # endregion helpers
@@ -362,9 +378,9 @@ def query_pr_comments(owner: str, repository: str, pr: int):
     )
 
 
-def _make_comment(edge: any) -> Comment:
+def __make_comment(edge: any, page: list[str]) -> Comment:
+    logging.debug(f"found comment: {edge}")
     node = edge["node"]
-    logging.debug(f"found comment {node['id']}")
     return Comment(
         id=node["id"],
         author=_make_author(node["author"]),
@@ -374,14 +390,20 @@ def _make_comment(edge: any) -> Comment:
         reactions=Pages(
             node,
             "reactions",
+            page,
             map(_make_reaction, edges(node, "reactions")),
         ),
         cursor=edge["cursor"],
     )
 
 
+def _make_comment(page: list[str]):
+    return lambda n: __make_comment(n, page)
+
+
 def _make_review(edge: any) -> Review:
     node = edge["node"]
+    logging.debug(f"found {node['state']} review by {node['author']['login']}")
     return Review(
         author=_make_author(node["author"]), state=node["state"], url=node["url"]
     )
@@ -393,14 +415,17 @@ def _make_commit(edge: any) -> Commit:
         comments=Pages(
             node,
             "comments",
-            map(_make_comment, edges(node, "comments")),
+            ["repository", "pullRequest", "commit"],
+            map(
+                _make_comment(["repository", "pullRequest", "commit", "comment"]),
+                edges(node, "comments"),
+            ),
         ),
     )
 
 
 def _make_thread(edge: any) -> CodeThread:
     node = edge["node"]
-    logging.debug(f"found review thread {node}")
     return CodeThread(
         path=node["path"],
         resolved=node["isResolved"],
@@ -408,7 +433,11 @@ def _make_thread(edge: any) -> CodeThread:
         comments=Pages(
             node,
             "comments",
-            map(_make_comment, edges(node, "comments")),
+            ["repository", "pullRequest", "reviewThread"],
+            map(
+                _make_comment(["repository", "pullRequest", "reviewThread", "comment"]),
+                edges(node, "comments"),
+            ),
         ),
     )
 
@@ -430,15 +459,27 @@ def make_pr(edge: any) -> PR:
         comments=Pages(
             node,
             "comments",
-            map(_make_comment, edges(node, "comments")),
+            ["repository", "pullRequest"],
+            map(_make_comment(["repository", "pullRequest", "comment"]), edges(node, "comments")),
         ),
         threads=Pages(
             node,
             "reviewThreads",
+            ["repository", "pullRequest"],
             map(_make_thread, edges(node, "reviewThreads")),
         ),
-        reviews=Pages(node, "reviews", map(_make_review, edges(node, "reviews"))),
-        commits=Pages(node, "commits", map(_make_commit, edges(node, "commits"))),
+        reviews=Pages(
+            node,
+            "reviews",
+            ["repository", "pullRequest"],
+            map(_make_review, edges(node, "reviews")),
+        ),
+        commits=Pages(
+            node,
+            "commits",
+            ["repository", "pullRequest"],
+            map(_make_commit, edges(node, "commits")),
+        ),
     )
 
 
@@ -484,7 +525,8 @@ def search_prs(
     heads = " ".join(f"head:{branch}" for branch in branches)
     next_page = lambda after: GQL_PRS_QUERY(owner, repository, heads, after)
 
-    prsPages = Pages(None, "search")
+    empty: list[PR] = None
+    prsPages = Pages(None, "search", [], empty)
     prsPages.append_all(token, make_pr, next_page)
     prs = prsPages.data
 
@@ -507,15 +549,16 @@ def search_prs(
             )
             pr.threads.append_all(token, _make_comment, next_page)
         if not pr.reviews.complete():
+            logging.debug(f"reviews not complete... {len(pr.reviews.data)}")
             next_page = lambda after: GQL_PR_REVIEWS_QUERY(
                 owner, repository, pr.number, after
             )
             pr.reviews.append_all(token, _make_review, next_page)
-            pass
+            logging.debug(f"reviews complete {len(pr.reviews.data)}")
+
         if not pr.commits.complete():
             next_page = lambda after: GQL_PR_COMMITS_QUERY(
                 owner, repository, pr.number, after
             )
             pr.commits.append_all(token, _make_commit, next_page)
-            pass
     return prs

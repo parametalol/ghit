@@ -39,6 +39,9 @@ def checkout(repo: git.Repository, record: Stack)->None:
     branch = repo.branches.get(branch_name) if branch_name else None
     if not branch:
         print(danger("Error:"), emphasis(branch_name), danger("not found in local."))
+        remote = repo.branches.remote["origin/"+branch_name]
+        if remote:
+            print(f"There is though a remote branch {emphasis(remote.branch_name)}.")
         return
     repo.checkout(branch)
     print(f"Checked-out {emphasis(branch.branch_name)}.")

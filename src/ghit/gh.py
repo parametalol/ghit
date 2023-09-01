@@ -170,14 +170,17 @@ class GH:
                 unresolved[pr] = nr
             if not args.verbose and nr:
                 line.append(warning("!"))
-            cr = [
-                r for r in pr.reviews.data if r.state and r.state == "CHANGES_REQUESTED"
-            ]
+
+            authors: dict[str, Review] = {}
+            for r in pr.reviews.data:
+                authors[r.author.login] = r
+
+            cr = [r for r in authors.values() if r.state == "CHANGES_REQUESTED"]
             if cr:
                 notapproved[pr] = cr
             if not args.verbose and cr:
                 line.append(danger("✗"))
-            approved = [r for r in pr.reviews.data if r.state == "APPROVED"]
+            approved = [r for r in authors.values() if r.state == "APPROVED"]
             if not args.verbose and not cr and approved:
                 line.append(good("✓"))
             sync = self.is_sync(pr, record) if record.get_parent() else True
@@ -281,7 +284,9 @@ class GH:
                 logging.debug("comment is up to date")
                 return
             md = json.dumps(md, ensure_ascii=False)
-            graphql(self.token, GQL_UPDATE_COMMENT(input(id=f'"{comment.id}"', body=md)))
+            graphql(
+                self.token, GQL_UPDATE_COMMENT(input(id=f'"{comment.id}"', body=md))
+            )
             print(f"Updated comment in {pr_number_with_style(pr)}.")
         else:
             md = json.dumps(md, ensure_ascii=False)
