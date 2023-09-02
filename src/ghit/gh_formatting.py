@@ -40,10 +40,6 @@ def pr_title_with_style(pr: PR) -> str:
     return with_style("dim", _pr_state_style(pr)(pr.title))
 
 
-def pr_with_style(pr: PR) -> str:
-    return pr_number_with_style(pr) + " " + pr_title_with_style(pr)
-
-
 # endregion style
 
 
@@ -88,6 +84,8 @@ def _format_approved(approved: list[Review]) -> Iterator[str]:
 
 
 def _format_not_sync(gh: GH, record: Stack, pr: PR) -> Iterator[str]:
+    if not record.get_parent():
+        return
     for p in gh.getPRs(record.branch_name):
         if p.number == pr.number:
             if p.base != record.get_parent().branch_name:

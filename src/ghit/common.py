@@ -3,7 +3,7 @@ import os
 from enum import Enum
 from .stack import Stack, open_stack
 from .gitools import get_current_branch, MyRemoteCallback
-from .styling import emphasis, warning
+from .styling import emphasis, warning, danger
 from .gh import initGH, GH
 from .gh_formatting import pr_number_with_style
 from .args import Args
@@ -26,7 +26,12 @@ def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
     if repo.is_empty:
         return repo, Stack(), None
     stack = open_stack(args.stack or stack_filename(repo))
+
     if not stack:
+        if args.stack:
+            raise BadResult(
+                "connect", danger("No stack found in " + args.stack)
+            )
         stack = Stack()
         current = get_current_branch(repo)
         stack.add_child(current.branch_name)
