@@ -444,48 +444,112 @@ def search_prs(
     prs = prsPages.data
     pr_path = ["data", "repository", "pullRequest"]
     for pr in prs:
-        pr.comments.append_all(
-            lambda after: path(
-                graphql(
-                    token,
-                    GQL_PR_COMMENTS_QUERY(owner, repository, pr.number, after),
-                ),
-                *pr_path,
-            )
-        )
-
-        pr.threads.append_all(
-            lambda after: path(
-                graphql(
-                    token,
-                    GQL_PR_THREADS_QUERY(owner, repository, pr.number, after),
-                ),
-                *pr_path,
-            )
-        )
-
-        pr.reviews.append_all(
-            lambda after: path(
-                graphql(
-                    token,
-                    GQL_PR_REVIEWS_QUERY(owner, repository, pr.number, after),
-                ),
-                *pr_path,
-            )
-        )
-
-        pr.commits.append_all(
-            lambda after: path(
-                graphql(
-                    token,
-                    GQL_PR_COMMITS_QUERY(owner, repository, pr.number, after),
-                ),
-                *pr_path,
-            )
-        )
-
+        _fetch_level_one(token, owner, repository, pr_path, pr)
     for pr in prs:
-        for comment in pr.comments.data:
+        _fetch_level_two(token, owner, repository, pr_path, pr)
+    for pr in prs:
+        _fetch_level_three(token, owner, repository, pr_path, pr)
+    return prs
+
+
+def _fetch_level_one(
+    token: str, owner: str, repository: str, pr_path: list[str], pr: PR
+):
+    pr.comments.append_all(
+        lambda after: path(
+            graphql(
+                token,
+                GQL_PR_COMMENTS_QUERY(owner, repository, pr.number, after),
+            ),
+            *pr_path,
+        )
+    )
+    pr.threads.append_all(
+        lambda after: path(
+            graphql(
+                token,
+                GQL_PR_THREADS_QUERY(owner, repository, pr.number, after),
+            ),
+            *pr_path,
+        )
+    )
+    pr.reviews.append_all(
+        lambda after: path(
+            graphql(
+                token,
+                GQL_PR_REVIEWS_QUERY(owner, repository, pr.number, after),
+            ),
+            *pr_path,
+        )
+    )
+    pr.commits.append_all(
+        lambda after: path(
+            graphql(
+                token,
+                GQL_PR_COMMITS_QUERY(owner, repository, pr.number, after),
+            ),
+            *pr_path,
+        )
+    )
+
+
+def _fetch_level_two(
+    token: str, owner: str, repository: str, pr_path: list[str], pr: PR
+):
+    for comment in pr.comments.data:
+        comment.reactions.append_all(
+            lambda after: path(
+                graphql(
+                    token,
+                    GQL_PR_COMMENT_REACTIONS_QUERY(
+                        owner, repository, pr.number, comment.cursor, after
+                    ),
+                    *pr_path,
+                    "comments",
+                )
+            )
+        )
+    for thread in pr.threads.data:
+        thread.comments.append_all(
+            lambda after: path(
+                graphql(
+                    token,
+                    GQL_PR_THREAD_COMMENTS_QUERY(
+                        owner, repository, pr.number, thread.cursor, after
+                    ),
+                ),
+                *pr_path,
+                "reviewThreads",
+                "edges",
+                0,
+                "node",
+                "comments",
+            )
+        )
+    for commit in pr.commits.data:
+        commit.comments.append_all(
+            lambda after: path(
+                graphql(
+                    token,
+                    GQL_PR_COMMIT_COMMENTS_QUERY(
+                        owner, repository, pr.number, after
+                    ),
+                ),
+                *pr_path,
+                "commits",
+                "edges",
+                0,
+                "node",
+                "comments",
+            ),
+        )
+
+
+def _fetch_level_three(
+    token: str, owner: str, repository: str, pr_path: list[str], pr: PR
+):
+    for thread in pr.threads.data:
+        for comment in thread.comments.data:
             comment.reactions.append_all(
                 lambda after: path(
                     graphql(
@@ -493,67 +557,20 @@ def search_prs(
                         GQL_PR_COMMENT_REACTIONS_QUERY(
                             owner, repository, pr.number, comment.cursor, after
                         ),
-                        *pr_path,
-                        "comments",
-                    )
+                    ),
+                    *pr_path,
+                    "comments",
+                    "edges",
+                    0,
+                    "reactions",
                 )
             )
-        for thread in pr.threads.data:
-            thread.comments.append_all(
+    for commit in pr.commits.data:
+        for comment in commit.comments.data:
+            comment.reactions.append_all(
                 lambda after: path(
                     graphql(
                         token,
-                        GQL_PR_THREAD_COMMENTS_QUERY(
-                            owner, repository, pr.number, thread.cursor, after
-                        ),
-                    ),
-                    *pr_path,
-                    "reviewThreads",
-                    "edges",
-                    0,
-                    "node",
-                    "comments",
-                )
-            )
-
-        for commit in pr.commits.data:
-            commit.comments.append_all(
-                lambda after: path(
-                    graphql(
-                        token,
-                        GQL_PR_COMMIT_COMMENTS_QUERY(
-                            owner, repository, pr.number, after
-                        ),
-                    ),
-                    *pr_path,
-                    "commits",
-                    "edges",
-                    0,
-                    "node",
-                    "comments",
-                ),
-            )
-
-    for pr in prs:
-        for thread in pr.threads.data:
-            for comment in thread.comments.data:
-                comment.reactions.append_all(
-                    lambda after: path(
-                        GQL_PR_COMMENT_REACTIONS_QUERY(
-                            owner, repository, pr.number, comment.cursor, after
-                        ),
-                        *pr_path,
-                        "comments",
-                        "edges",
-                        0,
-                        "reactions",
-                    )
-                )
-
-        for commit in pr.commits.data:
-            for comment in commit.comments.data:
-                comment.reactions.append_all(
-                    lambda after: path(
                         GQL_PR_COMMIT_COMMENT_REACTIONS_QUERY(
                             owner,
                             repository,
@@ -562,14 +579,14 @@ def search_prs(
                             comment.cursor,
                             after,
                         ),
-                        *pr_path,
-                        "commits",
-                        "edges",
-                        0,
-                        "comments",
-                        "edges",
-                        0,
-                        "reactions",
-                    )
+                    ),
+                    *pr_path,
+                    "commits",
+                    "edges",
+                    0,
+                    "comments",
+                    "edges",
+                    0,
+                    "reactions",
                 )
-    return prs
+            )

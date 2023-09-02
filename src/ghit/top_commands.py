@@ -7,6 +7,64 @@ from .common import BadResult, connect, stack_filename
 from .gitools import checkout, get_current_branch
 from .stack import Stack, open_stack
 from .styling import calm, deleted, normal, warning, with_style
+from .gh import GH
+
+
+def print_gh_info(
+    info: list[str],
+    parent_prefix: list[str],
+    record: Stack,
+    line: list[str],
+):
+    if len(info) == 1:
+        print(*line, info[0])
+    else:
+        print(*line)
+
+    if len(info) > 1:
+        for i in info:
+            print(
+                " ",
+                *parent_prefix,
+                "│   " if record.length() else "    ",
+                i,
+            )
+
+
+def _parent_tab(record: Stack) -> str:
+    return "  " if record.is_last_child() else "│ "
+
+
+def print_record(
+    verbose: bool,
+    repo: git.Repository,
+    gh: GH,
+    checked_out: str,
+    parent_prefix: list[str],
+    record: Stack,
+) -> int:
+    parent_prefix = parent_prefix[: record.depth - 2]
+    current = record.branch_name == checked_out
+
+    line = _print_line(
+        repo,
+        current,
+        parent_prefix,
+        record,
+    )
+
+    if record.get_parent():
+        parent_prefix.append(_parent_tab(record))
+
+    error = 0
+    if gh:
+        info, nr, cr = gh.pr_info(verbose, record)
+        if nr or cr:
+            error = 1
+        error = print_gh_info(info, parent_prefix, record, line)
+    else:
+        print(*line)
+    return error
 
 
 def ls(args: Args) -> None:
@@ -19,43 +77,10 @@ def ls(args: Args) -> None:
     checked_out = get_current_branch(repo).branch_name
     parent_prefix: list[str] = []
 
-    def parent_tab(record: Stack) -> str:
-        return "  " if record.is_last_child() else "│ "
-
     for record in stack.traverse():
-        parent_prefix = parent_prefix[: record.depth - 2]
-        current = record.branch_name == checked_out
-
-        line = _print_line(
-            repo,
-            current,
-            parent_prefix,
-            record,
+        error = print_record(
+            args.verbose, repo, gh, checked_out, parent_prefix, record
         )
-
-        if record.get_parent():
-            parent_prefix.append(parent_tab(record))
-
-        if gh:
-            info, nr, cr = gh.pr_info(args, record)
-            if nr or cr:
-                error = 1
-            if len(info) == 1:
-                line.append(info[0])
-                print(" ".join(line))
-            elif len(info) > 1:
-                print(" ".join(line))
-                for i in info:
-                    print(
-                        " ",
-                        " ".join(parent_prefix),
-                        "│   " if record.length() else "    ",
-                        i,
-                    )
-            else:
-                print(" ".join(line))
-        else:
-            print(" ".join(line))
     if error:
         raise BadResult("ls")
 

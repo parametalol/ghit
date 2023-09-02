@@ -37,43 +37,29 @@ def last_commits(
             break
 
 
-def checkout(repo: git.Repository, record: Stack) -> None:
-    branch_name = record.branch_name
-    branch = repo.branches.get(branch_name) if branch_name else None
-    if not branch:
-        print(
-            danger("Error:"),
-            emphasis(branch_name),
-            danger("not found in local."),
-        )
-        remote = repo.branches.remote["origin/" + branch_name]
-        if remote:
-            print(
-                "There is though a remote branch "
-                + emphasis(remote.branch_name)
-                + "."
-            )
+def print_branch_info(
+    repo: git.Repository, record: Stack, branch: git.Branch
+) -> None:
+    if not record.get_parent():
         return
-    repo.checkout(branch)
-    print(f"Checked-out {emphasis(branch.branch_name)}.")
-    if record.get_parent():
-        parent_branch = repo.branches[record.get_parent().branch_name]
-        a, _ = repo.ahead_behind(parent_branch.target, branch.target)
-        if a:
+    parent_branch = repo.branches[record.get_parent().branch_name]
+    a, _ = repo.ahead_behind(parent_branch.target, branch.target)
+    if a:
+        print(
+            "This branch has fallen back behind "
+            + emphasis(record.get_parent().branch_name)
+            + "."
+        )
+        print("You may want to restack to pick up the following commits:")
+        for commit in last_commits(repo, parent_branch.target, a):
             print(
-                "This branch has fallen back behind "
-                + emphasis(record.get_parent().branch_name)
-                + "."
-            )
-            print("You may want to restack to pick up the following commits:")
-            for commit in last_commits(repo, parent_branch.target, a):
-                print(
-                    inactive(
-                        f"\t[{commit.short_id}] "
-                        + commit.message.splitlines()[0]
-                    )
+                inactive(
+                    f"\t[{commit.short_id}] " + commit.message.splitlines()[0]
                 )
+            )
 
+
+def print_upstream_info(repo: git.Repository, branch: git.Branch) -> None:
     if not branch.upstream:
         print("The branch doesn't have an upstream.")
         return
@@ -105,3 +91,26 @@ def checkout(repo: git.Repository, record: Stack) -> None:
                     f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"
                 )
             )
+
+
+def checkout(repo: git.Repository, record: Stack) -> None:
+    branch_name = record.branch_name
+    branch = repo.branches.get(branch_name) if branch_name else None
+    if not branch:
+        print(
+            danger("Error:"),
+            emphasis(branch_name),
+            danger("not found in local."),
+        )
+        remote = repo.branches.remote["origin/" + branch_name]
+        if remote:
+            print(
+                "There is though a remote branch "
+                + emphasis(remote.branch_name)
+                + "."
+            )
+        return
+    repo.checkout(branch)
+    print(f"Checked-out {emphasis(branch.branch_name)}.")
+    print_branch_info(repo, record, branch)
+    print_upstream_info(repo, branch)

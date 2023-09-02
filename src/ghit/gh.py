@@ -2,11 +2,12 @@ import json
 import logging
 import os
 import subprocess
+from collections.abc import Iterator
+from dataclasses import dataclass
 from urllib.parse import ParseResult, urlparse
 
 import pygit2 as git
 
-from .args import Args
 from .gh_graphql import (
     GQL_ADD_COMMENT,
     GQL_CREATE_PR,
@@ -145,6 +146,8 @@ class GH:
         return self.__prs.get(branch_name, list[PR]())
 
     def is_sync(self, remote_pr: PR, record: Stack) -> bool:
+        if not record.get_parent():
+            return True
         for pr in self.getPRs(record.branch_name):
             if pr.number == remote_pr.number:
                 if remote_pr.base != record.get_parent().branch_name:
@@ -157,7 +160,7 @@ class GH:
                     return False
         return True
 
-    def unresolved(self, pr: PR) -> dict[Author, list[Comment]]:
+    def unresolved(pr: PR) -> dict[Author, list[Comment]]:
         result = [thread for thread in pr.threads.data if not thread.resolved]
 
         def author_reacted(thread: ReviewThread) -> bool:
@@ -197,108 +200,129 @@ class GH:
                     comments[c.author] = [c]
         return comments
 
+    @dataclass
+    class PRStats:
+        unresolved: dict[Author, list[Comment]]
+        change_requested: list[Review]
+        approved: list[Review]
+        in_sync: bool
+
+    def pr_stats(self, record: Stack) -> dict[PR, PRStats]:
+        stats: dict[PR, GH.PRStats] = {}
+        for pr in self.getPRs(record.branch_name):
+            authors: dict[str, Review] = {}
+            for r in pr.reviews.data:
+                authors[r.author.login] = r
+            nr = GH.unresolved(pr)
+            cr = [
+                r for r in authors.values() if r.state == "CHANGES_REQUESTED"
+            ]
+            approved = [r for r in authors.values() if r.state == "APPROVED"]
+            sync = self.is_sync(pr, record)
+            stats[pr] = GH.PRStats(nr, cr, approved, sync)
+        return stats
+
     def pr_info(
-        self, args: Args, record: Stack
+        self, verbose: bool, record: Stack
     ) -> tuple[list[str], dict[PR, ReviewThread], dict[PR, Review]]:
         lines: list[str] = []
         unresolved: dict[PR, list[ReviewThread]] = {}
         notapproved: dict[PR, list[Review]] = {}
-        for pr in self.getPRs(record.branch_name):
-            line = [pr_number_with_style(pr)]
-            nr = self.unresolved(pr)
-            if nr:
-                unresolved[pr] = nr
-            if not args.verbose and nr:
-                line.append(warning("!"))
 
-            authors: dict[str, Review] = {}
-            for r in pr.reviews.data:
-                authors[r.author.login] = r
+        for pr, stats in self.pr_stats(record).items():
+            if stats.unresolved:
+                unresolved[pr] = stats.unresolved
+            if stats.change_requested:
+                notapproved[pr] = stats.change_requested
 
-            cr = [
-                r for r in authors.values() if r.state == "CHANGES_REQUESTED"
-            ]
-            if cr:
-                notapproved[pr] = cr
-            if not args.verbose and cr:
-                line.append(danger("✗"))
-            approved = [r for r in authors.values() if r.state == "APPROVED"]
-            if not args.verbose and not cr and approved:
-                line.append(good("✓"))
-            sync = self.is_sync(pr, record) if record.get_parent() else True
-            if not args.verbose and not sync:
-                line.append(warning("⟳"))
-            line.append(" ")
-            line.append(pr_title_with_style(pr))
-            lines.append("".join(line))
-            if args.verbose:
-                vlines = []
-                for r in approved:
-                    vlines.append(
-                        with_style("dim", good("✓ Approved by "))
-                        + with_style("italic", good(str(r.author)))
-                        + with_style("dim", good(".")),
-                    )
-
-                if not sync:
-                    for p in self.getPRs(record.branch_name):
-                        if p.number == pr.number:
-                            if p.base != record.get_parent().branch_name:
-                                vlines.append(
-                                    with_style(
-                                        "dim",
-                                        warning("⟳ PR base ")
-                                        + emphasis(p.base)
-                                        + warning(
-                                            " doesn't match branch parent "
-                                        )
-                                        + emphasis(
-                                            record.get_parent().branch_name
-                                        )
-                                        + warning("."),
-                                    )
-                                )
-                if nr:
-                    for author, comments in nr.items():
-                        if len(comments) == 1:
-                            vlines.append(
-                                with_style(
-                                    "dim",
-                                    warning("! No reaction to a comment by "),
-                                )
-                                + with_style("italic", warning(str(author)))
-                                + with_style("dim", warning(":")),
-                            )
-                            vlines.append(f"  {colorful(comments[0].url)}")
-                        else:
-                            vlines.append(
-                                with_style(
-                                    "dim",
-                                    warning("! No reaction to comments by "),
-                                )
-                                + with_style("italic", warning(str(author)))
-                                + with_style("dim", warning(":")),
-                            )
-                            for i, comment in enumerate(comments, start=1):
-                                vlines.append(
-                                    "  "
-                                    + warning(f"{i}.")
-                                    + " "
-                                    + colorful(comment.url)
-                                )
-                if cr:
-                    for review in cr:
-                        vlines.append(
-                            with_style(
-                                "dim", danger("✗ Changes requested by ")
-                            )
-                            + with_style("italic", danger(str(review.author)))
-                            + with_style("dim", danger(":")),
-                        )
-                        vlines.append(f"  {colorful(review.url)}")
-                lines.extend(vlines)
+            lines.extend(list(self._format_info(verbose, record, pr, stats)))
 
         return lines, unresolved, notapproved
+
+    def _format_info(
+        self, verbose, record, pr, stats: PRStats
+    ) -> Iterator[str]:
+        pr_state = []
+        if not verbose:
+            if stats.unresolved:
+                pr_state.append(warning("!"))
+            if stats.change_requested:
+                pr_state.append(danger("✗"))
+            elif stats.approved:
+                pr_state.append(good("✓"))
+            if not stats.in_sync:
+                pr_state.append(warning("⟳"))
+
+        yield "".join(
+            [
+                pr_number_with_style(pr),
+                *pr_state,
+                " ",
+                pr_title_with_style(pr),
+            ]
+        )
+
+        if verbose:
+            yield from GH._format_approved(stats.approved)
+            if not stats.in_sync:
+                yield from self._format_not_sync(record, pr)
+            if stats.unresolved:
+                yield from GH._format_not_resolved(stats.unresolved)
+            if stats.change_requested:
+                yield from GH._format_change_requested(stats.change_requested)
+
+    def _format_approved(approved: list[Review]) -> Iterator[str]:
+        for r in approved:
+            yield with_style("dim", good("✓ Approved by ")) + with_style(
+                "italic", good(str(r.author))
+            ) + with_style("dim", good("."))
+
+    def _format_not_sync(self, record, pr) -> Iterator[str]:
+        for p in self.getPRs(record.branch_name):
+            if p.number == pr.number:
+                if p.base != record.get_parent().branch_name:
+                    yield with_style(
+                        "dim",
+                        warning("⟳ PR base ")
+                        + emphasis(p.base)
+                        + warning(" doesn't match branch parent ")
+                        + emphasis(record.get_parent().branch_name)
+                        + warning("."),
+                    )
+
+    def _format_change_requested(
+        change_requested: list[Review],
+    ) -> Iterator[str]:
+        for review in change_requested:
+            yield with_style(
+                "dim", danger("✗ Changes requested by ")
+            ) + with_style("italic", danger(str(review.author))) + with_style(
+                "dim", danger(":")
+            ),
+
+            yield f"  {colorful(review.url)}"
+
+    def _format_not_resolved(nr: dict[Author, list[Comment]]) -> Iterator[str]:
+        for author, comments in nr.items():
+            if len(comments) == 1:
+                yield with_style(
+                    "dim",
+                    warning("! No reaction to a comment by "),
+                ) + with_style("italic", warning(str(author))) + with_style(
+                    "dim", warning(":")
+                ),
+
+                yield f"  {colorful(comments[0].url)}"
+            else:
+                yield with_style(
+                    "dim",
+                    warning("! No reaction to comments by "),
+                ) + with_style("italic", warning(str(author))) + with_style(
+                    "dim", warning(":")
+                ),
+
+                for i, comment in enumerate(comments, start=1):
+                    yield "  " + warning(f"{i}.") + " " + colorful(comment.url)
 
     def _find_stack_comment(self, pr: PR) -> Comment | None:
         for comment in pr.comments.data:
