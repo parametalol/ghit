@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import subprocess
-from collections.abc import Iterator
 from dataclasses import dataclass
 from urllib.parse import ParseResult, urlparse
 
@@ -24,67 +23,12 @@ from .gh_graphql import (
     search_prs,
 )
 from .stack import Stack
-from .styling import (
-    calm,
-    colorful,
-    danger,
-    deleted,
-    emphasis,
-    good,
-    inactive,
-    warning,
-    with_style,
-)
 
 GH_SCHEME = "git@github.com:"
 
 GH_TEMPLATES = [".github", "docs", ""]
 
 COMMENT_FIRST_LINE = "Current dependencies on/for this PR:"
-
-
-# region style
-
-pr_state_style = {
-    "OPEN": good,
-    "CLOSED": lambda m: danger(deleted(m)),
-    "MERGED": calm,
-    "DRAFT": inactive,
-}
-
-
-def pr_state(pr: PR) -> str:
-    if pr.draft:
-        return "DRAFT"
-    if pr.merged:
-        return "MERGED"
-    return str(pr.state).upper()
-
-
-def pr_number_with_style(pr: PR) -> str:
-    line: list[str] = []
-    if pr.locked:
-        line.append("🔒")
-
-    def style(m: str):
-        with_style("dim", pr_state_style[pr_state(pr)](m))
-
-    line.append(style(f"#{pr.number} ({pr_state(pr)})"))
-    return " ".join(line)
-
-
-def pr_title_with_style(pr: PR) -> str:
-    def style(m: str):
-        with_style("dim", pr_state_style[pr_state(pr)](m))
-
-    return style(pr.title)
-
-
-def pr_with_style(pr: PR) -> str:
-    return pr_number_with_style(pr) + " " + pr_title_with_style(pr)
-
-
-# endregion style
 
 
 def get_gh_owner_repository(url: ParseResult) -> (str, str):
@@ -222,108 +166,6 @@ class GH:
             stats[pr] = GH.PRStats(nr, cr, approved, sync)
         return stats
 
-    def pr_info(
-        self, verbose: bool, record: Stack
-    ) -> tuple[list[str], dict[PR, ReviewThread], dict[PR, Review]]:
-        lines: list[str] = []
-        unresolved: dict[PR, list[ReviewThread]] = {}
-        notapproved: dict[PR, list[Review]] = {}
-
-        for pr, stats in self.pr_stats(record).items():
-            if stats.unresolved:
-                unresolved[pr] = stats.unresolved
-            if stats.change_requested:
-                notapproved[pr] = stats.change_requested
-
-            lines.extend(list(self._format_info(verbose, record, pr, stats)))
-
-        return lines, unresolved, notapproved
-
-    def _format_info(
-        self, verbose, record, pr, stats: PRStats
-    ) -> Iterator[str]:
-        pr_state = []
-        if not verbose:
-            if stats.unresolved:
-                pr_state.append(warning("!"))
-            if stats.change_requested:
-                pr_state.append(danger("✗"))
-            elif stats.approved:
-                pr_state.append(good("✓"))
-            if not stats.in_sync:
-                pr_state.append(warning("⟳"))
-
-        yield "".join(
-            [
-                pr_number_with_style(pr),
-                *pr_state,
-                " ",
-                pr_title_with_style(pr),
-            ]
-        )
-
-        if verbose:
-            yield from GH._format_approved(stats.approved)
-            if not stats.in_sync:
-                yield from self._format_not_sync(record, pr)
-            if stats.unresolved:
-                yield from GH._format_not_resolved(stats.unresolved)
-            if stats.change_requested:
-                yield from GH._format_change_requested(stats.change_requested)
-
-    def _format_approved(approved: list[Review]) -> Iterator[str]:
-        for r in approved:
-            yield with_style("dim", good("✓ Approved by ")) + with_style(
-                "italic", good(str(r.author))
-            ) + with_style("dim", good("."))
-
-    def _format_not_sync(self, record, pr) -> Iterator[str]:
-        for p in self.getPRs(record.branch_name):
-            if p.number == pr.number:
-                if p.base != record.get_parent().branch_name:
-                    yield with_style(
-                        "dim",
-                        warning("⟳ PR base ")
-                        + emphasis(p.base)
-                        + warning(" doesn't match branch parent ")
-                        + emphasis(record.get_parent().branch_name)
-                        + warning("."),
-                    )
-
-    def _format_change_requested(
-        change_requested: list[Review],
-    ) -> Iterator[str]:
-        for review in change_requested:
-            yield with_style(
-                "dim", danger("✗ Changes requested by ")
-            ) + with_style("italic", danger(str(review.author))) + with_style(
-                "dim", danger(":")
-            ),
-
-            yield f"  {colorful(review.url)}"
-
-    def _format_not_resolved(nr: dict[Author, list[Comment]]) -> Iterator[str]:
-        for author, comments in nr.items():
-            if len(comments) == 1:
-                yield with_style(
-                    "dim",
-                    warning("! No reaction to a comment by "),
-                ) + with_style("italic", warning(str(author))) + with_style(
-                    "dim", warning(":")
-                ),
-
-                yield f"  {colorful(comments[0].url)}"
-            else:
-                yield with_style(
-                    "dim",
-                    warning("! No reaction to comments by "),
-                ) + with_style("italic", warning(str(author))) + with_style(
-                    "dim", warning(":")
-                ),
-
-                for i, comment in enumerate(comments, start=1):
-                    yield "  " + warning(f"{i}.") + " " + colorful(comment.url)
-
     def _find_stack_comment(self, pr: PR) -> Comment | None:
         for comment in pr.comments.data:
             if comment.body.startswith(COMMENT_FIRST_LINE):
@@ -364,29 +206,27 @@ class GH:
         logging.debug("Query done.")
         return prs
 
-    def comment(self, pr: PR):
+    def comment(self, pr: PR) -> bool:
         logging.debug(f"commenting pr #{pr.number}")
         comment = self._find_stack_comment(pr)
         md = self._make_stack_comment(pr)
+        if comment and comment.body == md:
+            logging.debug("comment is up to date")
+            return
+        md = json.dumps(md, ensure_ascii=False)
         if comment:
-            if comment.body == md:
-                logging.debug("comment is up to date")
-                return
-            md = json.dumps(md, ensure_ascii=False)
             graphql(
                 self.token,
                 GQL_UPDATE_COMMENT(input(id=f'"{comment.id}"', body=md)),
             )
-            print(f"Updated comment in {pr_number_with_style(pr)}.")
-        else:
-            md = json.dumps(md, ensure_ascii=False)
-            graphql(
-                self.token,
-                GQL_ADD_COMMENT(input(subjectId=f'"{pr.id}"', body=md)),
-            )
-            print(f"Commented {pr_number_with_style(pr)}.")
+            return False
+        graphql(
+            self.token,
+            GQL_ADD_COMMENT(input(subjectId=f'"{pr.id}"', body=md)),
+        )
+        return True
 
-    def update_pr(self, record: Stack, pr: PR):
+    def update_pr(self, record: Stack, pr: PR) -> None:
         base = record.get_parent().branch_name
         if pr.base == base:
             return
@@ -398,14 +238,10 @@ class GH:
             ),
         )
         pr.base = base
-        print(
-            f"Set PR {pr_number_with_style(pr)} "
-            + f"base branch to {emphasis(base)}."
-        )
 
     def create_pr(
         self, base: str, branch_name: str, title: str = "", draft: bool = False
-    ) -> any:
+    ) -> PR:
         logging.debug(f"creating PR wiht base {base} and head {branch_name}")
         base_branch = self.repo.lookup_branch(base)
         if not base_branch.upstream:
@@ -441,7 +277,6 @@ class GH:
             self.__prs[branch_name].append(pr)
         else:
             self.__prs.update({branch_name: [pr]})
-        print("Created draft PR ", pr_number_with_style(pr), ".", sep="")
         self.comment(pr)
         return pr
 

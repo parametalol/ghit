@@ -7,7 +7,8 @@ class TestGraphQL(unittest.TestCase):
         f = first_n_after("test", "obj", 10, "after", opt="opt")
         self.assertEqual(
             'test(first: 10, after: "after", opt: opt)'
-            + "{ pageInfo{ endCursor hasNextPage } edges{ cursor node{ obj } } }",
+            + "{ pageInfo{ endCursor hasNextPage } "
+            + "edges{ cursor node{ obj } } }",
             f,
         )
 
@@ -20,6 +21,7 @@ class TestGraphQL(unittest.TestCase):
             'query pr_test{ repository(owner: "owner", name: "repository")'
             + "{ pullRequest(number: 42)"
             + '{ test(first: 10, after: "abc")'
-            + "{ pageInfo{ endCursor hasNextPage } edges{ cursor node{ obj } } } } } }",
+            + "{ pageInfo{ endCursor hasNextPage } "
+            + "edges{ cursor node{ obj } } } } } }",
             exeq,
         )

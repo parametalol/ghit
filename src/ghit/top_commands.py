@@ -6,22 +6,38 @@ from .args import Args
 from .common import BadResult, connect, stack_filename
 from .gitools import checkout, get_current_branch
 from .stack import Stack, open_stack
-from .styling import calm, deleted, normal, warning, with_style
+from .styling import (
+    calm,
+    deleted,
+    normal,
+    warning,
+    with_style,
+)
 from .gh import GH
+from .gh_formatting import format_info
 
 
-def print_gh_info(
-    info: list[str],
+def _parent_tab(record: Stack) -> str:
+    return "  " if record.is_last_child() else "│ "
+
+
+def _print_record(
+    verbose: bool,
+    gh: GH,
     parent_prefix: list[str],
     record: Stack,
-    line: list[str],
-):
-    if len(info) == 1:
-        print(*line, info[0])
-    else:
-        print(*line)
+) -> int:
+    error = 0
+    info: list[str] = []
+    for pr, stats in gh.pr_stats(record).items():
+        if stats.unresolved or stats.change_requested:
+            error = 1
+        info.extend(list(format_info(gh, verbose, record, pr, stats)))
 
-    if len(info) > 1:
+    if len(info) == 1:
+        print(" " + info[0])
+    else:
+        print()
         for i in info:
             print(
                 " ",
@@ -29,41 +45,6 @@ def print_gh_info(
                 "│   " if record.length() else "    ",
                 i,
             )
-
-
-def _parent_tab(record: Stack) -> str:
-    return "  " if record.is_last_child() else "│ "
-
-
-def print_record(
-    verbose: bool,
-    repo: git.Repository,
-    gh: GH,
-    checked_out: str,
-    parent_prefix: list[str],
-    record: Stack,
-) -> int:
-    parent_prefix = parent_prefix[: record.depth - 2]
-    current = record.branch_name == checked_out
-
-    line = _print_line(
-        repo,
-        current,
-        parent_prefix,
-        record,
-    )
-
-    if record.get_parent():
-        parent_prefix.append(_parent_tab(record))
-
-    error = 0
-    if gh:
-        info, nr, cr = gh.pr_info(verbose, record)
-        if nr or cr:
-            error = 1
-        error = print_gh_info(info, parent_prefix, record, line)
-    else:
-        print(*line)
     return error
 
 
@@ -78,9 +59,23 @@ def ls(args: Args) -> None:
     parent_prefix: list[str] = []
 
     for record in stack.traverse():
-        error = print_record(
-            args.verbose, repo, gh, checked_out, parent_prefix, record
+        parent_prefix = parent_prefix[: record.depth - 2]
+
+        _print_line(
+            repo, record.branch_name == checked_out, parent_prefix, record
         )
+
+        if record.get_parent():
+            parent_prefix.append(_parent_tab(record))
+
+        if gh:
+            error = max(
+                error,
+                _print_record(args.verbose, gh, parent_prefix, record),
+            )
+        else:
+            print()
+
     if error:
         raise BadResult("ls")
 
@@ -90,7 +85,7 @@ def _print_line(
     current: bool,
     parent_prefix: list[str],
     record: Stack,
-) -> list[str]:
+) -> None:
     line_color = calm if current else normal
     line = [line_color("⯈" if current else " "), *parent_prefix]
 
@@ -141,7 +136,7 @@ def _print_line(
         else:
             line.append(line_color("*"))
 
-    return line
+    print(*line, end="")
 
 
 def _move(args: Args, command: str) -> None:

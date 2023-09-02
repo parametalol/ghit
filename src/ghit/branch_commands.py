@@ -16,7 +16,9 @@ def branch_sync(args: Args) -> None:
         return
     origin = repo.remotes["origin"]
     if not origin:
-        raise BadResult("branch_sync", warning("No origin found for the repository."))
+        raise BadResult(
+            "branch_sync", warning("No origin found for the repository.")
+        )
     current = get_current_branch(repo)
     for record in stack.traverse():
         if record.branch_name == current.branch_name:
@@ -24,7 +26,8 @@ def branch_sync(args: Args) -> None:
             break
     else:
         raise BadResult(
-            "branch_sync", warning("Couldn't find current branch in the stack.")
+            "branch_sync",
+            warning("Couldn't find current branch in the stack."),
         )
     return
 

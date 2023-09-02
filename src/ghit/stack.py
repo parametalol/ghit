@@ -26,7 +26,9 @@ class Stack:
 
     def add_child(self, branch_name: str, enabled: bool = True) -> Stack:
         if branch_name in self._children:
-            raise Exception(f"'{branch_name}' already exist in '{self.branch_name}'")
+            raise Exception(
+                f"'{branch_name}' already exist in '{self.branch_name}'"
+            )
         child = Stack(branch_name, enabled, self)
         self._children.update({branch_name: child})
         return child
@@ -41,7 +43,11 @@ class Stack:
         return self.__parent is None
 
     def traverse(self, with_first_level: bool = True) -> Iterator[Stack]:
-        if not self.is_root() and self._enabled and (self.get_parent() or with_first_level):
+        if (
+            not self.is_root()
+            and self._enabled
+            and (self.get_parent() or with_first_level)
+        ):
             yield self
         for r in self._children.values():
             yield from r.traverse(with_first_level)
@@ -89,7 +95,7 @@ def open_stack(filename: str) -> Stack | None:
                 continue
             depth = len(line) - len(branch_name)
             logging.debug(
-                f"parsed: {'enabled' if enabled else 'disabled'} {branch_name} {depth}."
+                f"parsed: {enabled=} {branch_name} {depth}."
             )
             logging.debug(f"current parent: {parents[-1].branch_name}.")
 

@@ -1,9 +1,11 @@
 import pygit2 as git
 import os
+from enum import Enum
 from .stack import Stack, open_stack
 from .gitools import get_current_branch, MyRemoteCallback
 from .styling import emphasis, warning
 from .gh import initGH, GH
+from .gh_formatting import pr_number_with_style
 from .args import Args
 
 __connections: tuple[git.Repository, Stack, GH] = None
@@ -32,14 +34,18 @@ def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
     return __connections
 
 
-def update_upstream(repo: git.Repository, origin: git.Remote, branch: git.Branch):
+def update_upstream(
+    repo: git.Repository, origin: git.Remote, branch: git.Branch
+):
     full_name = branch.resolve().name
     mrc = MyRemoteCallback()
     origin.push([full_name], callbacks=mrc)
     if not mrc.message:
         # TODO: weak logic?
         branch_ref: str = origin.get_refspec(0).transform(full_name)
-        branch.upstream = repo.branches.remote[branch_ref.removeprefix("refs/remotes/")]
+        branch.upstream = repo.branches.remote[
+            branch_ref.removeprefix("refs/remotes/")
+        ]
         print(
             "Pushed ",
             emphasis(branch.branch_name),
@@ -52,6 +58,12 @@ def update_upstream(repo: git.Repository, origin: git.Remote, branch: git.Branch
         )
 
 
+class SyncResult(Enum):
+    COMMENTED = 1
+    UPDATED_COMMENT = 2
+    CREATED_PR = 3
+
+
 def sync_branch(
     repo: git.Repository,
     gh: GH,
@@ -59,17 +71,29 @@ def sync_branch(
     record: Stack,
     title: str = "",
     draft: bool = False,
-):
+) -> SyncResult:
     branch = repo.branches[record.branch_name]
     if not branch.upstream:
         update_upstream(repo, origin, branch)
     prs = gh.getPRs(record.branch_name)
     if prs and not all(p.closed for p in prs):
         for pr in prs:
-            gh.comment(pr)
+            if gh.comment(pr):
+                print(f"Commented {pr_number_with_style(pr)}.")
+            else:
+                print(f"Updated comment in {pr_number_with_style(pr)}.")
+
             gh.update_pr(record, pr)
+            print(
+                f"Set PR {pr_number_with_style(pr)} "
+                + f"base branch to {emphasis(pr.base)}."
+            )
+
     else:
-        gh.create_pr(record.get_parent().branch_name, record.branch_name, title, draft)
+        pr = gh.create_pr(
+            record.get_parent().branch_name, record.branch_name, title, draft
+        )
+        print("Created draft PR ", pr_number_with_style(pr), ".", sep="")
 
 
 class BadResult(Exception):
