@@ -22,5 +22,5 @@ Installation
 ------------
 
 ```sh
-pip install ghit-smartptr
+python3 -m pip install ghit-smartptr
 ```
