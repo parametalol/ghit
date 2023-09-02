@@ -4,7 +4,7 @@ import sys
 from .ghit import ghit
 
 
-def main()->int:
+def main() -> int:
     return ghit(sys.argv[1:])
 
 

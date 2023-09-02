@@ -1,4 +1,13 @@
-from .common import *
+from .common import (
+    Args,
+    connect,
+    BadResult,
+    sync_branch,
+    stack_filename,
+    update_upstream,
+)
+from .styling import warning
+from .gitools import get_current_branch, checkout
 
 
 def branch_sync(args: Args) -> None:
@@ -43,4 +52,4 @@ def create(args: Args) -> None:
     lines = []
     stack.dumps(lines)
     with open(args.stack or stack_filename(repo), "w") as ghit_stack:
-        ghit_stack.write("\n".join(lines)+"\n")
+        ghit_stack.write("\n".join(lines) + "\n")

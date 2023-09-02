@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 import pygit2 as git
-from .styling import *
+from .styling import danger, emphasis, inactive
 from .stack import Stack
 
 
@@ -18,7 +18,9 @@ class MyRemoteCallback(git.RemoteCallbacks):
 
 
 def get_default_branch(repo: git.Repository) -> str:
-    remote_head = repo.references["refs/remotes/origin/HEAD"].resolve().shorthand
+    remote_head = (
+        repo.references["refs/remotes/origin/HEAD"].resolve().shorthand
+    )
     return remote_head.removeprefix("origin/")
 
 
@@ -39,10 +41,18 @@ def checkout(repo: git.Repository, record: Stack) -> None:
     branch_name = record.branch_name
     branch = repo.branches.get(branch_name) if branch_name else None
     if not branch:
-        print(danger("Error:"), emphasis(branch_name), danger("not found in local."))
+        print(
+            danger("Error:"),
+            emphasis(branch_name),
+            danger("not found in local."),
+        )
         remote = repo.branches.remote["origin/" + branch_name]
         if remote:
-            print(f"There is though a remote branch {emphasis(remote.branch_name)}.")
+            print(
+                "There is though a remote branch "
+                + emphasis(remote.branch_name)
+                + "."
+            )
         return
     repo.checkout(branch)
     print(f"Checked-out {emphasis(branch.branch_name)}.")
@@ -51,12 +61,17 @@ def checkout(repo: git.Repository, record: Stack) -> None:
         a, _ = repo.ahead_behind(parent_branch.target, branch.target)
         if a:
             print(
-                f"This branch has fallen back behind {emphasis(record.get_parent().branch_name)}."
+                "This branch has fallen back behind "
+                + emphasis(record.get_parent().branch_name)
+                + "."
             )
             print("You may want to restack to pick up the following commits:")
             for commit in last_commits(repo, parent_branch.target, a):
                 print(
-                    inactive(f"\t[{commit.short_id}] {commit.message.splitlines()[0]}")
+                    inactive(
+                        f"\t[{commit.short_id}] "
+                        + commit.message.splitlines()[0]
+                    )
                 )
 
     if not branch.upstream:
@@ -68,13 +83,25 @@ def checkout(repo: git.Repository, record: Stack) -> None:
     )
     if a:
         print(
-            f"Following local commits are missing in upstream {emphasis(branch.upstream.branch_name)}:"
+            "Following local commits are missing in upstream "
+            + emphasis(branch.upstream.branch_name)
+            + ":"
         )
         for commit in last_commits(repo, branch.target, a):
-            print(inactive(f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"))
+            print(
+                inactive(
+                    f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"
+                )
+            )
     if b:
         print(
-            f"Following upstream commits are missing in local {emphasis(branch.branch_name)}:"
+            "Following upstream commits are missing in local "
+            + emphasis(branch.branch_name)
+            + ":"
         )
         for commit in last_commits(repo, branch.upstream.target, b):
-            print(inactive(f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"))
+            print(
+                inactive(
+                    f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"
+                )
+            )

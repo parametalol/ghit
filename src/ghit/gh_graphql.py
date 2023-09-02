@@ -2,7 +2,18 @@ from dataclasses import dataclass
 from typing import Callable
 import requests
 import sys
-from .graphql import *
+import logging
+from .graphql import (
+    fields,
+    obj,
+    query,
+    on,
+    paged,
+    cursor_or_null,
+    func,
+    path,
+    Pages,
+)
 
 # region query
 FIRST_FEW = {"first": 10}
@@ -48,17 +59,20 @@ def first_n_after(name: str, q: str, n: int, after: str, **opts):
     return paged(name, {"first": n, "after": cursor_or_null(after), **opts}, q)
 
 
-GQL_PRS_QUERY = lambda owner, repository, heads, after=None: query(
-    "query search_prs",
-    first_n_after(
-        "search",
-        on("PullRequest", GQL_PR),
-        10,
-        after,
-        type="ISSUE",
-        query=f'"repo:{owner}/{repository} is:pr {heads}"',
-    ),
-)
+def GQL_PRS_QUERY(
+    owner: str, repository: str, heads: list[str], after: str | None = None
+):
+    return query(
+        "query search_prs",
+        first_n_after(
+            "search",
+            on("PullRequest", GQL_PR),
+            10,
+            after,
+            type="ISSUE",
+            query=f'"repo:{owner}/{repository} is:pr {heads}"',
+        ),
+    )
 
 
 def pr_details_query(name: str, detail: Callable[..., str]):
@@ -76,7 +90,13 @@ def pr_details_query(name: str, detail: Callable[..., str]):
 
 
 GQL_PR_COMMENTS_QUERY = pr_details_query(
-    "pr_comments", lambda after: first_n_after("comments", GQL_COMMENT, 10, after)
+    "pr_comments",
+    lambda after: first_n_after(
+        "comments",
+        GQL_COMMENT,
+        10,
+        after,
+    ),
 )
 
 GQL_PR_COMMENT_REACTIONS_QUERY = pr_details_query(
@@ -142,43 +162,60 @@ GQL_PR_REVIEWS_QUERY = pr_details_query(
     "pr_reviews", lambda after: first_n_after("reviews", GQL_REVIEW, 40, after)
 )
 
-GQL_GET_REPO_ID = lambda owner, repository: query(
-    "query get_repo_id",
-    func("repository", {"owner": f'"{owner}"', "name": f'"{repository}"'}, "id"),
-)
+
+def GQL_GET_REPO_ID(owner: str, repository: str) -> str:
+    return query(
+        "query get_repo_id",
+        func(
+            "repository",
+            {"owner": f'"{owner}"', "name": f'"{repository}"'},
+            "id",
+        ),
+    )
+
 
 # endregion query
 
 # region mutations
 
-GQL_ADD_COMMENT = lambda comment_input: query(
-    "mutation add_pr_comment",
-    func("addComment", comment_input, "clientMutationId"),
-)
-GQL_UPDATE_COMMENT = lambda comment_input: query(
-    "mutation update_pr_comment",
-    func("updateIssueComment", comment_input, "clientMutationId"),
-)
+
+def GQL_ADD_COMMENT(comment_input: any) -> str:
+    return query(
+        "mutation add_pr_comment",
+        func("addComment", comment_input, "clientMutationId"),
+    )
 
 
-GQL_CREATE_PR = lambda pr_input: query(
-    "mutation create_pr",
-    func(
-        "createPullRequest",
-        pr_input,
-        "clientMutationId",
-        obj("pullRequest", GQL_PR),
-    ),
-)
+def GQL_UPDATE_COMMENT(comment_input: any) -> str:
+    return query(
+        "mutation update_pr_comment",
+        func("updateIssueComment", comment_input, "clientMutationId"),
+    )
 
-GQL_UPDATE_PR_BASE = lambda pr_input: query(
-    "mutation update_pr",
-    func(
-        "updatePullRequest",
-        pr_input,
-        "clientMutationId",
-    ),
-)
+
+def GQL_CREATE_PR(pr_input: any) -> str:
+    return query(
+        "mutation create_pr",
+        func(
+            "createPullRequest",
+            pr_input,
+            "clientMutationId",
+            obj("pullRequest", GQL_PR),
+        ),
+    )
+
+
+def GQL_UPDATE_PR_BASE(pr_input: any) -> str:
+    return query(
+        "mutation update_pr",
+        func(
+            "updatePullRequest",
+            pr_input,
+            "clientMutationId",
+        ),
+    )
+
+
 # endregion mutations
 
 # region classes
@@ -313,7 +350,9 @@ def _make_review(edge: any) -> Review:
     node = edge["node"]
     logging.debug(f"found {node['state']} review by {node['author']['login']}")
     return Review(
-        author=_make_author(node["author"]), state=node["state"], url=node["url"]
+        author=_make_author(node["author"]),
+        state=node["state"],
+        url=node["url"],
     )
 
 
@@ -363,7 +402,7 @@ def make_pr(edge: any) -> PR:
 def graphql(token: str, query: str) -> any:
     logging.debug(f"query GH graphql: {query}")
     response = requests.post(
-        url=f"https://api.github.com/graphql",
+        url="https://api.github.com/graphql",
         headers={
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github.v3+json",
@@ -398,7 +437,8 @@ def search_prs(
     prsPages = Pages("search", make_pr)
     prsPages.append_all(
         lambda after: path(
-            graphql(token, GQL_PRS_QUERY(owner, repository, heads, after)), "data"
+            graphql(token, GQL_PRS_QUERY(owner, repository, heads, after)),
+            "data",
         )
     )
     prs = prsPages.data
@@ -417,7 +457,8 @@ def search_prs(
         pr.threads.append_all(
             lambda after: path(
                 graphql(
-                    token, GQL_PR_THREADS_QUERY(owner, repository, pr.number, after)
+                    token,
+                    GQL_PR_THREADS_QUERY(owner, repository, pr.number, after),
                 ),
                 *pr_path,
             )
@@ -426,7 +467,8 @@ def search_prs(
         pr.reviews.append_all(
             lambda after: path(
                 graphql(
-                    token, GQL_PR_REVIEWS_QUERY(owner, repository, pr.number, after)
+                    token,
+                    GQL_PR_REVIEWS_QUERY(owner, repository, pr.number, after),
                 ),
                 *pr_path,
             )
@@ -435,7 +477,8 @@ def search_prs(
         pr.commits.append_all(
             lambda after: path(
                 graphql(
-                    token, GQL_PR_COMMITS_QUERY(owner, repository, pr.number, after)
+                    token,
+                    GQL_PR_COMMITS_QUERY(owner, repository, pr.number, after),
                 ),
                 *pr_path,
             )

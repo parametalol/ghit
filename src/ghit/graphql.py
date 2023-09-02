@@ -60,7 +60,9 @@ class Pages(Generic[T]):
 
     def append_all(self, next_page) -> None:
         while not self.complete():
-            logging.debug(f"querying {self.name} after cursor {self.next_cursor}")
+            logging.debug(
+                f"querying {self.name} after cursor {self.next_cursor}"
+            )
             data = next_page(self.next_cursor)
             logging.debug(f"{data=}")
             if not data:
@@ -89,7 +91,7 @@ def path(obj: any, *keys: str | int) -> any:
     if not obj:
         return None
     for k in keys:
-        if type(obj) == list:
+        if isinstance(obj, list):
             if obj and len(obj) > (k if k >= 0 else len(obj) + k):
                 obj = obj[k]
                 continue

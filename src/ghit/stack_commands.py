@@ -1,6 +1,12 @@
-from .common import *
-from .styling import *
+from collections.abc import Iterator
+
 import pygit2 as git
+
+from .args import Args
+from .common import BadResult, connect, sync_branch
+from .gitools import last_commits, MyRemoteCallback
+from .stack import Stack
+from .styling import emphasis, good, inactive, warning
 
 
 def _check_stack(
@@ -23,7 +29,7 @@ def _check_stack(
             depth = record.depth
 
 
-def check(args: Args)->None:
+def check(args: Args) -> None:
     repo, stack, _ = connect(args)
     for notsync in _check_stack(repo, stack):
         record, a = notsync
@@ -34,12 +40,24 @@ def check(args: Args)->None:
             emphasis(record.branch_name),
             warning("with:"),
         )
-        parent_ref = repo.references.get(f"refs/heads/{record.get_parent().branch_name}")
+        parent_ref = repo.references.get(
+            f"refs/heads/{record.get_parent().branch_name}"
+        )
 
         for commit in last_commits(repo, parent_ref.target, a):
-            print(inactive(f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"))
+            print(
+                inactive(
+                    f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"
+                )
+            )
 
-        print(f"  Run `git rebase -i {record.get_parent().branch_name} {record.branch_name}`.")
+        print(
+            "  Run `git rebase -i "
+            + record.get_parent().branch_name
+            + " "
+            + record.branch_name
+            + "`."
+        )
 
     if not notsync:
         print(good("🗸 The stack is in shape."))
@@ -87,18 +105,24 @@ def restack(args: Args):
         )
 
         for commit in last_commits(repo, parent_ref.target, a):
-            print(inactive(f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"))
+            print(
+                inactive(
+                    f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"
+                )
+            )
 
         print(f"  Run `git rebase -i {parent_name} {record_name}`.")
 
 
-def stack_sync(args: Args)->None:
+def stack_sync(args: Args) -> None:
     repo, stack, gh = connect(args)
     if repo.is_empty:
         return
     origin = repo.remotes["origin"]
     if not origin:
-        raise BadResult("stack_sync", warning("No origin found for the repository."))
+        raise BadResult(
+            "stack_sync", warning("No origin found for the repository.")
+        )
 
     mrc = MyRemoteCallback()
     print("Fetching from", origin.url)
@@ -110,7 +134,8 @@ def stack_sync(args: Args)->None:
     for record in stack.traverse(False):
         sync_branch(repo, gh, origin, record)
 
-def dump(args:Args)->None:
+
+def dump(args: Args) -> None:
     _, stack, _ = connect(args)
     lines = []
     stack.dumps(lines)

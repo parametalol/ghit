@@ -1,9 +1,15 @@
-from .common import *
-from .styling import *
+import os
+
+import pygit2 as git
+
 from .args import Args
+from .common import BadResult, connect, stack_filename
+from .gitools import checkout, get_current_branch
+from .stack import Stack, open_stack
+from .styling import calm, deleted, normal, warning, with_style
 
 
-def ls(args: Args)->None:
+def ls(args: Args) -> None:
     repo, stack, gh = connect(args)
     if repo.is_empty:
         return
@@ -82,7 +88,12 @@ def _print_line(
 
     line.append(
         (deleted if not branch else warning if behind else line_color)(
-            with_style("bold", record.branch_name) if current else record.branch_name
+            with_style(
+                "bold",
+                record.branch_name,
+            )
+            if current
+            else record.branch_name
         )
     )
 
@@ -96,7 +107,12 @@ def _print_line(
                 branch.upstream.target,
             )
             if a or b:
-                line.append(with_style("dim", "↕" if a and b else "↑" if a else "↓"))
+                line.append(
+                    with_style(
+                        "dim",
+                        "↕" if a and b else "↑" if a else "↓",
+                    )
+                )
         else:
             line.append(line_color("*"))
 
@@ -158,6 +174,7 @@ def top(args: Args) -> None:
 def bottom(args: Args) -> None:
     return _jump(args, "bottom")
 
+
 def init(args: Args) -> None:
     repo = git.Repository(args.repository)
     repopath = os.path.dirname(os.path.abspath(repo.path))
@@ -166,9 +183,11 @@ def init(args: Args) -> None:
     if stack:
         return
 
-    if os.path.commonpath([filename, repopath]) == repopath and not repo.path_is_ignored(filename):
+    if os.path.commonpath(
+        [filename, repopath]
+    ) == repopath and not repo.path_is_ignored(filename):
         with open(os.path.join(repopath, ".gitignore"), "a") as gitignore:
-            gitignore.write(os.path.basename(filename)+"\n")
+            gitignore.write(os.path.basename(filename) + "\n")
 
     with open(filename, "w") as ghitstack:
         ghitstack.write(get_current_branch(repo).branch_name + "\n")

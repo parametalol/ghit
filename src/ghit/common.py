@@ -1,17 +1,20 @@
 import pygit2 as git
-from .stack import *
-from .gitools import *
-from .styling import *
+import os
+from .stack import Stack, open_stack
+from .gitools import get_current_branch, MyRemoteCallback
+from .styling import emphasis, warning
 from .gh import initGH, GH
 from .args import Args
 
 __connections: tuple[git.Repository, Stack, GH] = None
 
-GHIT_STACK_FILENAME=".ghit.stack"
+GHIT_STACK_FILENAME = ".ghit.stack"
 
-def stack_filename(repo: git.Repository)->str:
+
+def stack_filename(repo: git.Repository) -> str:
     repopath = os.path.dirname(os.path.abspath(repo.path))
     return os.path.join(repopath, GHIT_STACK_FILENAME)
+
 
 def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
     global __connections
@@ -68,8 +71,11 @@ def sync_branch(
     else:
         gh.create_pr(record.get_parent().branch_name, record.branch_name, title, draft)
 
+
 class BadResult(Exception):
-    def __init__(self, command: str, message: str = "", level = warning, *args: object) -> None:
+    def __init__(
+        self, command: str, message: str = "", level=warning, *args: object
+    ) -> None:
         super().__init__(*args)
         self.command = command
         self.message = message

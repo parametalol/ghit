@@ -1,6 +1,8 @@
 import unittest
 from dataclasses import dataclass
-from ghit.graphql import *
+
+from ghit.graphql import (Pages, cursor_or_null, edges, end_cursor, fields,
+                          func, input, last_edge_cursor, obj, on, paged, path)
 
 
 @dataclass

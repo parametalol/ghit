@@ -1,14 +1,39 @@
-import os
 import json
-import subprocess
 import logging
+import os
+import subprocess
+from urllib.parse import ParseResult, urlparse
+
 import pygit2 as git
-from urllib.parse import urlparse
-from urllib.parse import ParseResult
-from .styling import *
-from .stack import *
+
 from .args import Args
-from .gh_graphql import *
+from .gh_graphql import (
+    GQL_ADD_COMMENT,
+    GQL_CREATE_PR,
+    GQL_GET_REPO_ID,
+    GQL_UPDATE_COMMENT,
+    GQL_UPDATE_PR_BASE,
+    PR,
+    Author,
+    Comment,
+    Review,
+    ReviewThread,
+    graphql,
+    make_pr,
+    search_prs,
+)
+from .stack import Stack
+from .styling import (
+    calm,
+    colorful,
+    danger,
+    deleted,
+    emphasis,
+    good,
+    inactive,
+    warning,
+    with_style,
+)
 
 GH_SCHEME = "git@github.com:"
 
@@ -39,13 +64,18 @@ def pr_number_with_style(pr: PR) -> str:
     line: list[str] = []
     if pr.locked:
         line.append("🔒")
-    style = lambda m: with_style("dim", pr_state_style[pr_state(pr)](m))
+
+    def style(m: str):
+        with_style("dim", pr_state_style[pr_state(pr)](m))
+
     line.append(style(f"#{pr.number} ({pr_state(pr)})"))
     return " ".join(line)
 
 
 def pr_title_with_style(pr: PR) -> str:
-    style = lambda m: with_style("dim", pr_state_style[pr_state(pr)](m))
+    def style(m: str):
+        with_style("dim", pr_state_style[pr_state(pr)](m))
+
     return style(pr.title)
 
 
@@ -119,7 +149,10 @@ class GH:
             if pr.number == remote_pr.number:
                 if remote_pr.base != record.get_parent().branch_name:
                     logging.debug(
-                        f"remote PR base doesn't match: {remote_pr.base} vs {record.get_parent().branch_name}"
+                        "remote PR base doesn't match: "
+                        + remote_pr.base
+                        + " vs "
+                        + record.get_parent().branch_name
                     )
                     return False
         return True
@@ -129,7 +162,7 @@ class GH:
 
         def author_reacted(thread: ReviewThread) -> bool:
             if not thread.comments.data:
-                logging.debug(f"no comments?")
+                logging.debug("no comments?")
                 return False
             for reaction in thread.comments.data[-1].reactions.data:
                 if (
@@ -137,10 +170,11 @@ class GH:
                     and reaction.content not in ["EYES", "CONFUSED"]
                 ):
                     logging.debug(
-                        f"{thread.comments.data[-1].id} author reacted with {reaction.content}"
+                        f"{thread.comments.data[-1].id}"
+                        + f" author reacted with {reaction.content}"
                     )
                     return True
-            logging.debug(f"author didn't react")
+            logging.debug("author didn't react")
             return False
 
         def author_commented(thread: ReviewThread) -> bool:
@@ -153,8 +187,9 @@ class GH:
 
         comments: dict[Author, list[Comment]] = {}
         for thread in filter(
-                lambda cd: not author_commented(cd) and not author_reacted(cd), result
-            ):
+            lambda cd: not author_commented(cd) and not author_reacted(cd),
+            result,
+        ):
             for c in thread.comments.data:
                 if c.author in comments:
                     comments[c.author].append(c)
@@ -180,7 +215,9 @@ class GH:
             for r in pr.reviews.data:
                 authors[r.author.login] = r
 
-            cr = [r for r in authors.values() if r.state == "CHANGES_REQUESTED"]
+            cr = [
+                r for r in authors.values() if r.state == "CHANGES_REQUESTED"
+            ]
             if cr:
                 notapproved[pr] = cr
             if not args.verbose and cr:
@@ -212,8 +249,12 @@ class GH:
                                         "dim",
                                         warning("⟳ PR base ")
                                         + emphasis(p.base)
-                                        + warning(" doesn't match branch parent ")
-                                        + emphasis(record.get_parent().branch_name)
+                                        + warning(
+                                            " doesn't match branch parent "
+                                        )
+                                        + emphasis(
+                                            record.get_parent().branch_name
+                                        )
                                         + warning("."),
                                     )
                                 )
@@ -222,7 +263,8 @@ class GH:
                         if len(comments) == 1:
                             vlines.append(
                                 with_style(
-                                    "dim", warning("! No reaction to a comment by ")
+                                    "dim",
+                                    warning("! No reaction to a comment by "),
                                 )
                                 + with_style("italic", warning(str(author)))
                                 + with_style("dim", warning(":")),
@@ -231,17 +273,25 @@ class GH:
                         else:
                             vlines.append(
                                 with_style(
-                                    "dim", warning("! No reaction to comments by ")
+                                    "dim",
+                                    warning("! No reaction to comments by "),
                                 )
                                 + with_style("italic", warning(str(author)))
                                 + with_style("dim", warning(":")),
                             )
-                            for i, comment in enumerate(comments, start = 1):
-                                vlines.append("  "+warning(f"{i}.") + " "+ colorful(comment.url))
+                            for i, comment in enumerate(comments, start=1):
+                                vlines.append(
+                                    "  "
+                                    + warning(f"{i}.")
+                                    + " "
+                                    + colorful(comment.url)
+                                )
                 if cr:
                     for review in cr:
                         vlines.append(
-                            with_style("dim", danger("✗ Changes requested by "))
+                            with_style(
+                                "dim", danger("✗ Changes requested by ")
+                            )
                             + with_style("italic", danger(str(review.author)))
                             + with_style("dim", danger(":")),
                         )
@@ -300,12 +350,16 @@ class GH:
                 return
             md = json.dumps(md, ensure_ascii=False)
             graphql(
-                self.token, GQL_UPDATE_COMMENT(input(id=f'"{comment.id}"', body=md))
+                self.token,
+                GQL_UPDATE_COMMENT(input(id=f'"{comment.id}"', body=md)),
             )
             print(f"Updated comment in {pr_number_with_style(pr)}.")
         else:
             md = json.dumps(md, ensure_ascii=False)
-            graphql(self.token, GQL_ADD_COMMENT(input(subjectId=f'"{pr.id}"', body=md)))
+            graphql(
+                self.token,
+                GQL_ADD_COMMENT(input(subjectId=f'"{pr.id}"', body=md)),
+            )
             print(f"Commented {pr_number_with_style(pr)}.")
 
     def update_pr(self, record: Stack, pr: PR):
@@ -320,7 +374,10 @@ class GH:
             ),
         )
         pr.base = base
-        print(f"Set PR {pr_number_with_style(pr)} base branch to {emphasis(base)}.")
+        print(
+            f"Set PR {pr_number_with_style(pr)} "
+            + f"base branch to {emphasis(base)}."
+        )
 
     def create_pr(
         self, base: str, branch_name: str, title: str = "", draft: bool = False
@@ -353,7 +410,9 @@ class GH:
                 )
             ),
         )
-        pr = make_pr({"node": pr_json["data"]["createPullRequest"]["pullRequest"]})
+        pr = make_pr(
+            {"node": pr_json["data"]["createPullRequest"]["pullRequest"]}
+        )
         if branch_name in self.__prs:
             self.__prs[branch_name].append(pr)
         else:
