@@ -5,6 +5,7 @@ from .common import (
     sync_branch,
     stack_filename,
     update_upstream,
+    push_branch,
 )
 from .styling import emphasis, danger
 from .gitools import get_current_branch, checkout
@@ -56,6 +57,7 @@ def create(args: Args) -> None:
 
     origin = repo.remotes["origin"]
     if origin:
+        push_branch(origin, branch)
         update_upstream(repo, origin, branch)
 
     checkout(repo, record)

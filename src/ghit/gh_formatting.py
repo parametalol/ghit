@@ -1,4 +1,5 @@
 from collections.abc import Iterator, Callable
+from datetime import datetime
 from .gh_graphql import PR, Review, Author, Comment
 from .stack import Stack
 from .styling import (
@@ -71,7 +72,7 @@ def format_info(
         if not stats.in_sync:
             yield from _format_not_sync(gh, record, pr)
         if stats.unresolved:
-            yield from _format_not_resolved(stats.unresolved)
+            yield from _format_not_resolved(stats.unresolved, pr.merged_at)
         if stats.change_requested:
             yield from _format_change_requested(stats.change_requested)
 
@@ -112,7 +113,17 @@ def _format_change_requested(
         yield f"  {colorful(review.url)}"
 
 
-def _format_not_resolved(nr: dict[Author, list[Comment]]) -> Iterator[str]:
+def _late_commment_sign(comment: Comment, merged_at: datetime | None) -> str:
+    return (
+        ""
+        if not merged_at or merged_at > comment.created_at
+        else warning("+ ")
+    )
+
+
+def _format_not_resolved(
+    nr: dict[Author, list[Comment]], merged_at: datetime | None
+) -> Iterator[str]:
     for author, comments in nr.items():
         if len(comments) == 1:
             yield with_style(
@@ -121,8 +132,10 @@ def _format_not_resolved(nr: dict[Author, list[Comment]]) -> Iterator[str]:
             ) + with_style("italic", warning(str(author))) + with_style(
                 "dim", warning(":")
             )
+            yield "  " + _late_commment_sign(
+                comments[0], merged_at
+            ) + colorful(comments[0].url)
 
-            yield f"  {colorful(comments[0].url)}"
         else:
             yield with_style(
                 "dim",
@@ -132,4 +145,6 @@ def _format_not_resolved(nr: dict[Author, list[Comment]]) -> Iterator[str]:
             )
 
             for i, comment in enumerate(comments, start=1):
-                yield "  " + warning(f"{i}.") + " " + colorful(comment.url)
+                yield "  " + warning(f"{i}. ") + _late_commment_sign(
+                    comment, merged_at
+                ) + colorful(comment.url)

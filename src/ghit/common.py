@@ -54,7 +54,7 @@ def update_upstream(
     )
 
 
-def push_branch(origin: git.Remote, branch: git.Branch) -> str:
+def push_branch(origin: git.Remote, branch: git.Branch):
     mrc = MyRemoteCallback()
     origin.push([branch.name], callbacks=mrc)
     if mrc.message:
@@ -73,7 +73,6 @@ def push_branch(origin: git.Remote, branch: git.Branch) -> str:
         ".",
         sep="",
     )
-    return mrc.message
 
 
 def sync_branch(
@@ -86,9 +85,9 @@ def sync_branch(
 ) -> None:
     branch = repo.branches[record.branch_name]
     if not branch.upstream:
+        push_branch(origin, branch)
         update_upstream(repo, origin, branch)
 
-    push_branch(origin, branch)
     prs = gh.getPRs(record.branch_name)
     if prs and not all(p.closed for p in prs):
         for pr in prs:
