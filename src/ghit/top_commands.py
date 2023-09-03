@@ -21,7 +21,7 @@ def _parent_tab(record: Stack) -> str:
     return "  " if record.is_last_child() else "│ "
 
 
-def _print_record(
+def _print_gh_info(
     verbose: bool,
     gh: GH,
     parent_prefix: list[str],
@@ -71,7 +71,7 @@ def ls(args: Args) -> None:
         if gh:
             error = max(
                 error,
-                _print_record(args.verbose, gh, parent_prefix, record),
+                _print_gh_info(args.verbose, gh, parent_prefix, record),
             )
         else:
             print()

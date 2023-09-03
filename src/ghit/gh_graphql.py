@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Callable
+from datetime import datetime
 import requests
 import sys
 import logging
@@ -24,7 +25,7 @@ GQL_COMMENT = fields(
     "id",
     "url",
     "body",
-    "minimizedReason",
+    "createdAt",
     GQL_AUTHOR,
     paged("reactions", FIRST_FEW, GQL_REACTION),
 )
@@ -47,6 +48,7 @@ GQL_PR = fields(
     "locked",
     "closed",
     "merged",
+    "mergedAt",
     "state",
     paged("comments", FIRST_FEW, GQL_COMMENT),
     paged("reviewThreads", FIRST_FEW, GQL_REVIEW_THREAD),
@@ -245,6 +247,7 @@ class Reaction:
 class Comment:
     id: str
     author: Author
+    created_at: datetime
     body: str
     reacted: bool
     url: str
@@ -283,6 +286,7 @@ class PR:
     state: str
     closed: bool
     merged: bool
+    merged_at: datetime | None
     locked: bool
     draft: bool
     base: str
@@ -338,6 +342,7 @@ def _make_comment(edge: any) -> Comment:
     return Comment(
         id=node["id"],
         author=_make_author(node["author"]),
+        created_at=datetime.fromisoformat(node["createdAt"]),
         body=node["body"],
         reacted=False,
         url=node["url"],
@@ -386,6 +391,9 @@ def make_pr(edge: any) -> PR:
         locked=node["locked"],
         closed=node["closed"],
         merged=node["merged"],
+        merged_at=datetime.fromisoformat(node["mergedAt"])
+        if node["merged"]
+        else None,
         state=node["state"],
         base=node["baseRefName"],
         head=node["headRefName"],
