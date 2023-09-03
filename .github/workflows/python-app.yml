@@ -30,4 +30,4 @@ jobs:
           --count --show-source --statistics
     - name: Run unittest
       run: |
-        python -m unittest discover -s src/tests -v
+        python -m unittest discover -s src -v
