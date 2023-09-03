@@ -1,8 +1,20 @@
 import unittest
 from dataclasses import dataclass
 
-from ghit.graphql import (Pages, cursor_or_null, edges, end_cursor, fields,
-                          func, input, last_edge_cursor, obj, on, paged, path)
+from ghit.graphql import (
+    Pages,
+    cursor_or_null,
+    edges,
+    end_cursor,
+    fields,
+    func,
+    input,
+    last_edge_cursor,
+    obj,
+    on,
+    paged,
+    path,
+)
 
 
 @dataclass
@@ -32,7 +44,8 @@ class TestGraphQL(unittest.TestCase):
 
     def test_func(self):
         self.assertEqual(
-            'f(a: 1, b: "word"){ c d }', func("f", {"a": 1, "b": '"word"'}, "c", "d")
+            'f(a: 1, b: "word"){ c d }',
+            func("f", {"a": 1, "b": '"word"'}, "c", "d"),
         )
 
         self.assertEqual(
@@ -47,13 +60,15 @@ class TestGraphQL(unittest.TestCase):
         )
 
         self.assertEqual(
-            'func(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } edges{ cursor node{ 1 2 } } }',
+            'func(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } '
+            + "edges{ cursor node{ 1 2 } } }",
             f,
         )
 
     def test_paged(self):
         self.assertEqual(
-            'object(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } edges{ cursor node{ c d } } }',
+            'object(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } '
+            + "edges{ cursor node{ c d } } }",
             paged("object", {"a": 1, "b": '"word"'}, "c", "d"),
         )
 
@@ -140,7 +155,9 @@ class TestGraphQL(unittest.TestCase):
     def test_path(self):
         self.assertEqual("abc", path({"a": "abc"}, "a"))
         self.assertEqual("abc", path(["abc"], 0))
-        self.assertEqual("abc", path({"a": {"b": ["x", "y", "abc"]}}, "a", "b", -1))
+        self.assertEqual(
+            "abc", path({"a": {"b": ["x", "y", "abc"]}}, "a", "b", -1)
+        )
 
     def test_edges(self):
         data = {
