@@ -7,6 +7,7 @@ from urllib.parse import ParseResult, urlparse
 
 import pygit2 as git
 
+from . import graphql as gql
 from .gh_graphql import (
     GQL_ADD_COMMENT,
     GQL_CREATE_PR,
@@ -217,12 +218,12 @@ class GH:
         if comment:
             graphql(
                 self.token,
-                GQL_UPDATE_COMMENT(input(id=f'"{comment.id}"', body=md)),
+                GQL_UPDATE_COMMENT(gql.input(id=f'"{comment.id}"', body=md)),
             )
             return False
         graphql(
             self.token,
-            GQL_ADD_COMMENT(input(subjectId=f'"{pr.id}"', body=md)),
+            GQL_ADD_COMMENT(gql.input(subjectId=f'"{pr.id}"', body=md)),
         )
         return True
 
@@ -234,7 +235,7 @@ class GH:
         graphql(
             self.token,
             GQL_UPDATE_PR_BASE(
-                input(pullRequestId=f'"{pr.id}"', baseRefName=f'"{base}"')
+                gql.input(pullRequestId=f'"{pr.id}"', baseRefName=f'"{base}"')
             ),
         )
         pr.base = base
@@ -260,7 +261,7 @@ class GH:
         pr_json = graphql(
             self.token,
             GQL_CREATE_PR(
-                input(
+                gql.input(
                     repositoryId=f'"{repository_id}"',
                     baseRefName=f'"{base}"',
                     headRefName=f'"{head}"',
