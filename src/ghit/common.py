@@ -1,6 +1,5 @@
 import pygit2 as git
 import os
-from enum import Enum
 from .stack import Stack, open_stack
 from .gitools import get_current_branch, MyRemoteCallback
 from .styling import emphasis, warning, danger
@@ -40,41 +39,41 @@ def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
 
 
 def update_upstream(
-    repo: git.Repository,
-    origin: git.Remote,
-    branch: git.Branch,
-    push: bool = False,
+    repo: git.Repository, origin: git.Remote, branch: git.Branch
 ):
-    full_name = branch.resolve().name
+    # TODO: weak logic?
+    branch_ref: str = origin.get_refspec(0).transform(branch.resolve().name)
+    branch.upstream = repo.branches.remote[
+        branch_ref.removeprefix("refs/remotes/")
+    ]
+    print(
+        "Set upstream to ",
+        emphasis(branch.upstream.branch_name),
+        ".",
+        sep="",
+    )
+
+
+def push_branch(origin: git.Remote, branch: git.Branch) -> str:
     mrc = MyRemoteCallback()
-    if push:
-        origin.push([full_name], callbacks=mrc)
-        print(
-            "Pushed ",
-            emphasis(branch.branch_name),
-            " to remote ",
-            emphasis(origin.url),
-            ".",
-            sep="",
-        )
-    if not mrc.message:
-        # TODO: weak logic?
-        branch_ref: str = origin.get_refspec(0).transform(full_name)
-        branch.upstream = repo.branches.remote[
-            branch_ref.removeprefix("refs/remotes/")
-        ]
-        print(
-            "Set upstream to ",
-            emphasis(branch.upstream.branch_name),
-            ".",
-            sep="",
+    origin.push([branch.name], callbacks=mrc)
+    if mrc.message:
+        raise BadResult(
+            "Push branch",
+            danger("Failed to push ")
+            + emphasis(branch.name)
+            + danger(": " + mrc.message),
         )
 
-
-class SyncResult(Enum):
-    COMMENTED = 1
-    UPDATED_COMMENT = 2
-    CREATED_PR = 3
+    print(
+        "Pushed ",
+        emphasis(branch.branch_name),
+        " to remote ",
+        emphasis(origin.url),
+        ".",
+        sep="",
+    )
+    return mrc.message
 
 
 def sync_branch(
@@ -84,10 +83,12 @@ def sync_branch(
     record: Stack,
     title: str = "",
     draft: bool = False,
-) -> SyncResult:
+) -> None:
     branch = repo.branches[record.branch_name]
     if not branch.upstream:
-        update_upstream(repo, origin, branch, True)
+        update_upstream(repo, origin, branch)
+
+    push_branch(origin, branch)
     prs = gh.getPRs(record.branch_name)
     if prs and not all(p.closed for p in prs):
         for pr in prs:
