@@ -40,11 +40,23 @@ def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
 
 
 def update_upstream(
-    repo: git.Repository, origin: git.Remote, branch: git.Branch
+    repo: git.Repository,
+    origin: git.Remote,
+    branch: git.Branch,
+    push: bool = False,
 ):
     full_name = branch.resolve().name
     mrc = MyRemoteCallback()
-    origin.push([full_name], callbacks=mrc)
+    if push:
+        origin.push([full_name], callbacks=mrc)
+        print(
+            "Pushed ",
+            emphasis(branch.branch_name),
+            " to remote ",
+            emphasis(origin.url),
+            ".",
+            sep="",
+        )
     if not mrc.message:
         # TODO: weak logic?
         branch_ref: str = origin.get_refspec(0).transform(full_name)
@@ -52,11 +64,7 @@ def update_upstream(
             branch_ref.removeprefix("refs/remotes/")
         ]
         print(
-            "Pushed ",
-            emphasis(branch.branch_name),
-            " to remote ",
-            emphasis(origin.url),
-            " and set upstream to ",
+            "Set upstream to ",
             emphasis(branch.upstream.branch_name),
             ".",
             sep="",
@@ -79,7 +87,7 @@ def sync_branch(
 ) -> SyncResult:
     branch = repo.branches[record.branch_name]
     if not branch.upstream:
-        update_upstream(repo, origin, branch)
+        update_upstream(repo, origin, branch, True)
     prs = gh.getPRs(record.branch_name)
     if prs and not all(p.closed for p in prs):
         for pr in prs:

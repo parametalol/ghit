@@ -9,12 +9,13 @@ def get_git_ssh_credentials() -> git.credentials.KeypairFromAgent:
 
 
 class MyRemoteCallback(git.RemoteCallbacks):
+    def __init__(self, credentials=None, certificate=None):
+        super().__init__(credentials or get_git_ssh_credentials(), certificate)
+        self.message = ""
+
     def push_update_reference(self, refname, message):
         self.message = message
         self.refname = refname
-
-    def credentials(self, url, username_from_url, allowed_types):
-        return get_git_ssh_credentials()
 
 
 def get_default_branch(repo: git.Repository) -> str:
