@@ -11,17 +11,18 @@ Features
   * base state
   * PR state
   * unresolved PR comments
-* Stack navigation: `ghit up`, `ghit down`, `ghit top`, `ghit bottom`
+* Stack navigation (checkout): `ghit up`, `ghit down`, `ghit top`, `ghit bottom`
 * Stack initialization with `ghit init`
   * create `.ghit.stack` with the current branch as the main branch
   * add `.ghit.stack` to `.gitignore`
 * Stack manipulation: `ghit branch create <name>`
   * create and switch to the new branch
   * add new branch name to `.ghit.stack`
-* Stack publication with `ghit stack update`:
-  * push branches upstream
-  * create or update GitHub PRs
-  * create or update dependencies comment
+* Stack or branch publication with `ghit stack submit` or `ghit branch submit`:
+  * push branch(es) upstream
+  * create or update GitHub PR(s)
+  * create or update dependencies comment(s)
+* Check that branches in a stack sit on the heads of their parents with `ghit stack check`
 
 Installation
 ------------
