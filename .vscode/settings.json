@@ -1,6 +1,4 @@
 {
-    "python.linting.flake8Enabled": true,
-    "python.linting.enabled": true,
     "python.testing.unittestArgs": [
         "-v",
         "-s",
@@ -13,5 +11,4 @@
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter"
     },
-    "python.formatting.provider": "none"
 }
