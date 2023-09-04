@@ -3,9 +3,9 @@ import logging
 import os
 import sys
 
-from .branch_commands import branch_sync, create
+from .branch_commands import branch_submit, create
 from .common import Args, BadResult
-from .stack_commands import check, dump, restack, stack_sync
+from .stack_commands import check, stack_submit
 from .top_commands import bottom, down, init, ls, top, up
 
 
@@ -42,36 +42,34 @@ def add_top_commands(parser: argparse.ArgumentParser):
 def add_stack_commands(parser: argparse.ArgumentParser):
     parser_stack_sub = parser.add_subparsers()
     parser_stack_sub.add_parser("check").set_defaults(func=check)
-    parser_stack_sub.add_parser("dump").set_defaults(func=dump)
+    # parser_stack_sub.add_parser(
+    #    "restack",
+    #    help="suggest git commands to rebase the branches "
+    #    + "according to the stack",
+    # ).set_defaults(func=restack)
     parser_stack_sub.add_parser(
-        "restack",
-        help="suggest git commands to rebase the branches "
-        + "according to the stack",
-    ).set_defaults(func=restack)
-    parser_stack_sub.add_parser(
-        "sync",
-        help="fetch from origin, push stack branches upstream "
-        + "and update PRs",
-    ).set_defaults(func=stack_sync)
+        "submit",
+        help="push stack branches upstream and update PRs",
+    ).set_defaults(func=stack_submit)
 
 
 def add_branch_commands(parser: argparse.ArgumentParser):
     parser_branch_sub = parser.add_subparsers()
+    cr = parser_branch_sub.add_parser(
+        "create", help="create branch, set remote upstream, update stack file"
+    )
+    cr.add_argument("branch", help="branch name to create")
+    cr.set_defaults(func=create)
+
     upr = parser_branch_sub.add_parser(
-        "sync",
+        "submit",
         help="push branch upstream, create a PR or update the existing PR(s)",
     )
     upr.add_argument("-t", "--title", help="PR title")
     upr.add_argument(
         "-d", "--draft", help="create draft PR", action="store_true"
     )
-    upr.set_defaults(func=branch_sync)
-
-    cr = parser_branch_sub.add_parser(
-        "create", help="create branch, set remote upstream, update stack file"
-    )
-    cr.add_argument("branch", help="branch name to create")
-    cr.set_defaults(func=create)
+    upr.set_defaults(func=branch_submit)
 
 
 def ghit(argv: list[str]) -> int:

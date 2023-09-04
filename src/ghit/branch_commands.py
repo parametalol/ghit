@@ -2,32 +2,30 @@ from .common import (
     Args,
     connect,
     BadResult,
-    sync_branch,
+    push_and_pr,
     stack_filename,
-    update_upstream,
-    push_branch,
 )
 from .styling import emphasis, danger
 from .gitools import get_current_branch, checkout
 
 
-def branch_sync(args: Args) -> None:
+def branch_submit(args: Args) -> None:
     repo, stack, gh = connect(args)
     if not gh:
         return
     origin = repo.remotes["origin"]
     if not origin:
         raise BadResult(
-            "branch_sync", danger("No origin found for the repository.")
+            "branch_submit", danger("No origin found for the repository.")
         )
     current = get_current_branch(repo)
     for record in stack.traverse():
         if record.branch_name == current.branch_name:
-            sync_branch(repo, gh, origin, record, args.title, args.draft)
+            push_and_pr(repo, gh, origin, record, args.title, args.draft)
             break
     else:
         raise BadResult(
-            "branch_sync",
+            "branch_submit",
             danger("Couldn't find current branch in the stack."),
         )
     return
@@ -54,11 +52,6 @@ def create(args: Args) -> None:
     branch = repo.branches.local.create(
         name=args.branch, commit=repo.get(repo.head.target)
     )
-
-    origin = repo.remotes["origin"]
-    if origin:
-        push_branch(origin, branch)
-        update_upstream(repo, origin, branch)
 
     checkout(repo, record)
 

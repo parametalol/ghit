@@ -75,7 +75,7 @@ def push_branch(origin: git.Remote, branch: git.Branch):
     )
 
 
-def sync_branch(
+def push_and_pr(
     repo: git.Repository,
     gh: GH,
     origin: git.Remote,

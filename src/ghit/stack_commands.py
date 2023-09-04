@@ -3,8 +3,8 @@ from collections.abc import Iterator
 import pygit2 as git
 
 from .args import Args
-from .common import BadResult, connect, sync_branch
-from .gitools import last_commits, MyRemoteCallback
+from .common import BadResult, connect, push_and_pr
+from .gitools import last_commits
 from .stack import Stack
 from .styling import emphasis, good, inactive, warning
 
@@ -114,29 +114,15 @@ def restack(args: Args):
         print(f"  Run `git rebase -i {parent_name} {record_name}`.")
 
 
-def stack_sync(args: Args) -> None:
+def stack_submit(args: Args) -> None:
     repo, stack, gh = connect(args)
     if repo.is_empty:
         return
     origin = repo.remotes["origin"]
     if not origin:
         raise BadResult(
-            "stack_sync", warning("No origin found for the repository.")
+            "stack_submit", warning("No origin found for the repository.")
         )
 
-    mrc = MyRemoteCallback()
-    print("Fetching from", origin.url)
-    progress = origin.fetch(callbacks=mrc)
-    print("\treceived objects:", progress.received_objects)
-    print("\ttotal deltas:", progress.total_deltas)
-    print("\ttotal objects:", progress.total_objects)
-
     for record in stack.traverse(False):
-        sync_branch(repo, gh, origin, record)
-
-
-def dump(args: Args) -> None:
-    _, stack, _ = connect(args)
-    lines = []
-    stack.dumps(lines)
-    print("\n".join(lines))
+        push_and_pr(repo, gh, origin, record)
