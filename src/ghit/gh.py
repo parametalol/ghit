@@ -130,7 +130,9 @@ class GH:
                 thread.comments.data
                 and thread.comments.data[-1].author.login == pr.author.login
             )
-            logging.debug(f"{thread.comments.data[-1].id} author {commented=}")
+            logging.debug(
+                f"{thread.comments.data[-1].id} author commented={commented}"
+            )
             return commented
 
         comments: dict[Author, list[Comment]] = {}

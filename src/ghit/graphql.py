@@ -64,7 +64,7 @@ class Pages(Generic[T]):
                 f"querying {self.name} after cursor {self.next_cursor}"
             )
             data = next_page(self.next_cursor)
-            logging.debug(f"{data=}")
+            logging.debug(f"data={data}")
             if not data:
                 raise Exception("No data in response")
             self.end_cursor, self.has_next_page = end_cursor(data, self.name)
