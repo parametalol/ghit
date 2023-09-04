@@ -2,27 +2,17 @@ from collections.abc import Iterator, Callable
 from datetime import datetime
 from .gh_graphql import PR, Review, Author, Comment
 from .stack import Stack
-from .styling import (
-    good,
-    calm,
-    inactive,
-    danger,
-    deleted,
-    warning,
-    emphasis,
-    colorful,
-    with_style,
-)
+from . import styling as s
 from .gh import GH
 
 
 # region style
 
 pr_state_style: dict[str, Callable[[str], str]] = {
-    "OPEN": good,
-    "CLOSED": lambda m: danger(deleted(m)),
-    "MERGED": calm,
-    "DRAFT": inactive,
+    "OPEN": s.good,
+    "CLOSED": lambda m: s.danger(s.deleted(m)),
+    "MERGED": s.calm,
+    "DRAFT": s.inactive,
 }
 
 
@@ -31,14 +21,14 @@ def _pr_state_style(pr: PR) -> Callable[[str], str]:
 
 
 def pr_number_with_style(pr: PR) -> str:
-    number = with_style(
+    number = s.with_style(
         "dim", _pr_state_style(pr)(f"#{pr.number} ({pr.state})")
     )
     return ("🔒" if pr.locked else "") + number
 
 
 def pr_title_with_style(pr: PR) -> str:
-    return with_style("dim", _pr_state_style(pr)(pr.title))
+    return s.with_style("dim", _pr_state_style(pr)(pr.title))
 
 
 # endregion style
@@ -50,13 +40,13 @@ def format_info(
     pr_state = []
     if not verbose:
         if stats.unresolved:
-            pr_state.append(warning("!"))
+            pr_state.append(s.warning("!"))
         if stats.change_requested:
-            pr_state.append(danger("✗"))
+            pr_state.append(s.danger("✗"))
         elif stats.approved:
-            pr_state.append(good("✓"))
+            pr_state.append(s.good("✓"))
         if not stats.in_sync:
-            pr_state.append(warning("⟳"))
+            pr_state.append(s.warning("⟳"))
 
     yield "".join(
         [
@@ -79,9 +69,9 @@ def format_info(
 
 def _format_approved(approved: list[Review]) -> Iterator[str]:
     for r in approved:
-        yield with_style("dim", good("✓ Approved by ")) + with_style(
-            "italic", good(str(r.author))
-        ) + with_style("dim", good("."))
+        yield s.with_style("dim", s.good("✓ Approved by ")) + s.with_style(
+            "italic", s.good(str(r.author))
+        ) + s.with_style("dim", s.good("."))
 
 
 def _format_not_sync(gh: GH, record: Stack, pr: PR) -> Iterator[str]:
@@ -90,13 +80,13 @@ def _format_not_sync(gh: GH, record: Stack, pr: PR) -> Iterator[str]:
     for p in gh.getPRs(record.branch_name):
         if p.number == pr.number:
             if p.base != record.get_parent().branch_name:
-                yield with_style(
+                yield s.with_style(
                     "dim",
-                    warning("⟳ PR base ")
-                    + emphasis(p.base)
-                    + warning(" doesn't match branch parent ")
-                    + emphasis(record.get_parent().branch_name)
-                    + warning("."),
+                    s.warning("⟳ PR base ")
+                    + s.emphasis(p.base)
+                    + s.warning(" doesn't match branch parent ")
+                    + s.emphasis(record.get_parent().branch_name)
+                    + s.warning("."),
                 )
 
 
@@ -104,20 +94,22 @@ def _format_change_requested(
     change_requested: list[Review],
 ) -> Iterator[str]:
     for review in change_requested:
-        yield with_style(
-            "dim", danger("✗ Changes requested by ")
-        ) + with_style("italic", danger(str(review.author))) + with_style(
-            "dim", danger(":")
+        yield s.with_style(
+            "dim", s.danger("✗ Changes requested by ")
+        ) + s.with_style(
+            "italic", s.danger(str(review.author))
+        ) + s.with_style(
+            "dim", s.danger(":")
         )
 
-        yield f"  {colorful(review.url)}"
+        yield f"  {s.colorful(review.url)}"
 
 
 def _late_commment_sign(comment: Comment, merged_at: datetime | None) -> str:
     return (
         ""
         if not merged_at or merged_at > comment.created_at
-        else warning("+ ")
+        else s.warning("+ ")
     )
 
 
@@ -126,25 +118,25 @@ def _format_not_resolved(
 ) -> Iterator[str]:
     for author, comments in nr.items():
         if len(comments) == 1:
-            yield with_style(
+            yield s.with_style(
                 "dim",
-                warning("! No reaction to a comment by "),
-            ) + with_style("italic", warning(str(author))) + with_style(
-                "dim", warning(":")
+                s.warning("! No reaction to a comment by "),
+            ) + s.with_style("italic", s.warning(str(author))) + s.with_style(
+                "dim", s.warning(":")
             )
             yield "  " + _late_commment_sign(
                 comments[0], merged_at
-            ) + colorful(comments[0].url)
+            ) + s.colorful(comments[0].url)
 
         else:
-            yield with_style(
+            yield s.with_style(
                 "dim",
-                warning("! No reaction to comments by "),
-            ) + with_style("italic", warning(str(author))) + with_style(
-                "dim", warning(":")
+                s.warning("! No reaction to comments by "),
+            ) + s.with_style("italic", s.warning(str(author))) + s.with_style(
+                "dim", s.warning(":")
             )
 
             for i, comment in enumerate(comments, start=1):
-                yield "  " + warning(f"{i}. ") + _late_commment_sign(
+                yield "  " + s.warning(f"{i}. ") + _late_commment_sign(
                     comment, merged_at
-                ) + colorful(comment.url)
+                ) + s.colorful(comment.url)

@@ -6,13 +6,7 @@ from .args import Args
 from .common import BadResult, connect, stack_filename
 from .gitools import checkout, get_current_branch
 from .stack import Stack, open_stack
-from .styling import (
-    calm,
-    deleted,
-    normal,
-    warning,
-    with_style,
-)
+from . import styling as s
 from .gh import GH
 from .gh_formatting import format_info
 
@@ -77,7 +71,7 @@ def ls(args: Args) -> None:
             print()
 
     if error:
-        raise BadResult("ls")
+        raise BadResult()
 
 
 def _print_line(
@@ -86,7 +80,7 @@ def _print_line(
     parent_prefix: list[str],
     record: Stack,
 ) -> None:
-    line_color = calm if current else normal
+    line_color = s.calm if current else s.normal
     line = [line_color("⯈" if current else " "), *parent_prefix]
 
     behind = 0
@@ -107,8 +101,8 @@ def _print_line(
         line.append(g1 + g2)
 
     line.append(
-        (deleted if not branch else warning if behind else line_color)(
-            with_style(
+        (s.deleted if not branch else s.warning if behind else line_color)(
+            s.with_style(
                 "bold",
                 record.branch_name,
             )
@@ -118,7 +112,7 @@ def _print_line(
     )
 
     if behind != 0:
-        line.append(warning(f"({behind} behind)"))
+        line.append(s.warning(f"({behind} behind)"))
 
     if branch:
         if branch.upstream:
@@ -128,7 +122,7 @@ def _print_line(
             )
             if a or b:
                 line.append(
-                    with_style(
+                    s.with_style(
                         "dim",
                         "↕" if a and b else "↑" if a else "↓",
                     )

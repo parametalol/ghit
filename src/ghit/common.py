@@ -2,7 +2,7 @@ import pygit2 as git
 import os
 from .stack import Stack, open_stack
 from .gitools import get_current_branch, MyRemoteCallback
-from .styling import emphasis, warning, danger
+from . import styling as s
 from .gh import initGH, GH
 from .gh_formatting import pr_number_with_style
 from .args import Args
@@ -28,9 +28,7 @@ def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
 
     if not stack:
         if args.stack:
-            raise BadResult(
-                "connect", danger("No stack found in " + args.stack)
-            )
+            raise BadResult(s.danger("No stack found in " + args.stack))
         stack = Stack()
         current = get_current_branch(repo)
         stack.add_child(current.branch_name)
@@ -48,7 +46,7 @@ def update_upstream(
     ]
     print(
         "Set upstream to ",
-        emphasis(branch.upstream.branch_name),
+        s.emphasis(branch.upstream.branch_name),
         ".",
         sep="",
     )
@@ -59,17 +57,16 @@ def push_branch(origin: git.Remote, branch: git.Branch):
     origin.push([branch.name], callbacks=mrc)
     if mrc.message:
         raise BadResult(
-            "Push branch",
-            danger("Failed to push ")
-            + emphasis(branch.name)
-            + danger(": " + mrc.message),
+            s.danger("Failed to push ")
+            + s.emphasis(branch.name)
+            + s.danger(": " + mrc.message),
         )
 
     print(
         "Pushed ",
-        emphasis(branch.branch_name),
+        s.emphasis(branch.branch_name),
         " to remote ",
-        emphasis(origin.url),
+        s.emphasis(origin.url),
         ".",
         sep="",
     )
@@ -99,21 +96,22 @@ def push_and_pr(
             gh.update_pr(record, pr)
             print(
                 f"Set PR {pr_number_with_style(pr)} "
-                + f"base branch to {emphasis(pr.base)}."
+                + f"base branch to {s.emphasis(pr.base)}."
             )
+            print(s.colorful(pr.url))
 
     else:
         pr = gh.create_pr(
             record.get_parent().branch_name, record.branch_name, title, draft
         )
-        print("Created draft PR ", pr_number_with_style(pr), ".", sep="")
+        print(
+            "Created draft PR " if draft else "Created PR ",
+            pr_number_with_style(pr),
+            ".",
+            sep="",
+        )
+        print(s.colorful(pr.url))
 
 
 class BadResult(Exception):
-    def __init__(
-        self, command: str, message: str = "", level=warning, *args: object
-    ) -> None:
-        super().__init__(*args)
-        self.command = command
-        self.message = message
-        self.level = level
+    pass

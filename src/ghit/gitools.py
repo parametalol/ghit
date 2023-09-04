@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 import pygit2 as git
-from .styling import danger, emphasis, inactive
+from . import styling as s
 from .stack import Stack
 
 
@@ -48,13 +48,13 @@ def print_branch_info(
     if a:
         print(
             "This branch has fallen back behind "
-            + emphasis(record.get_parent().branch_name)
+            + s.emphasis(record.get_parent().branch_name)
             + "."
         )
         print("You may want to restack to pick up the following commits:")
         for commit in last_commits(repo, parent_branch.target, a):
             print(
-                inactive(
+                s.inactive(
                     f"\t[{commit.short_id}] " + commit.message.splitlines()[0]
                 )
             )
@@ -71,24 +71,24 @@ def print_upstream_info(repo: git.Repository, branch: git.Branch) -> None:
     if a:
         print(
             "Following local commits are missing in upstream "
-            + emphasis(branch.upstream.branch_name)
+            + s.emphasis(branch.upstream.branch_name)
             + ":"
         )
         for commit in last_commits(repo, branch.target, a):
             print(
-                inactive(
+                s.inactive(
                     f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"
                 )
             )
     if b:
         print(
             "Following upstream commits are missing in local "
-            + emphasis(branch.branch_name)
+            + s.emphasis(branch.branch_name)
             + ":"
         )
         for commit in last_commits(repo, branch.upstream.target, b):
             print(
-                inactive(
+                s.inactive(
                     f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"
                 )
             )
@@ -99,19 +99,19 @@ def checkout(repo: git.Repository, record: Stack) -> None:
     branch = repo.branches.get(branch_name) if branch_name else None
     if not branch:
         print(
-            danger("Error:"),
-            emphasis(branch_name),
-            danger("not found in local."),
+            s.danger("Error:"),
+            s.emphasis(branch_name),
+            s.danger("not found in local."),
         )
         remote = repo.branches.remote["origin/" + branch_name]
         if remote:
             print(
                 "There is though a remote branch "
-                + emphasis(remote.branch_name)
+                + s.emphasis(remote.branch_name)
                 + "."
             )
         return
     repo.checkout(branch)
-    print(f"Checked-out {emphasis(branch.branch_name)}.")
+    print(f"Checked-out {s.emphasis(branch.branch_name)}.")
     print_branch_info(repo, record, branch)
     print_upstream_info(repo, branch)

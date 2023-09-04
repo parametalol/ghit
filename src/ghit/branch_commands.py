@@ -5,7 +5,7 @@ from .common import (
     push_and_pr,
     stack_filename,
 )
-from .styling import emphasis, danger
+from . import styling as s
 from .gitools import get_current_branch, checkout
 
 
@@ -15,9 +15,7 @@ def branch_submit(args: Args) -> None:
         return
     origin = repo.remotes["origin"]
     if not origin:
-        raise BadResult(
-            "branch_submit", danger("No origin found for the repository.")
-        )
+        raise BadResult(s.danger("No origin found for the repository."))
     current = get_current_branch(repo)
     for record in stack.traverse():
         if record.branch_name == current.branch_name:
@@ -25,8 +23,7 @@ def branch_submit(args: Args) -> None:
             break
     else:
         raise BadResult(
-            "branch_submit",
-            danger("Couldn't find current branch in the stack."),
+            s.danger("Couldn't find current branch in the stack."),
         )
     return
 
@@ -44,10 +41,9 @@ def create(args: Args) -> None:
     branch = repo.lookup_branch(args.branch)
     if branch:
         raise BadResult(
-            "create",
-            danger("Branch ")
-            + emphasis(args.branch)
-            + danger(" already exists."),
+            s.danger("Branch ")
+            + s.emphasis(args.branch)
+            + s.danger(" already exists."),
         )
     branch = repo.branches.local.create(
         name=args.branch, commit=repo.get(repo.head.target)

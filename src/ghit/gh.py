@@ -8,21 +8,7 @@ from urllib.parse import ParseResult, urlparse
 import pygit2 as git
 
 from . import graphql as gql
-from .gh_graphql import (
-    GQL_ADD_COMMENT,
-    GQL_CREATE_PR,
-    GQL_GET_REPO_ID,
-    GQL_UPDATE_COMMENT,
-    GQL_UPDATE_PR_BASE,
-    PR,
-    Author,
-    Comment,
-    Review,
-    ReviewThread,
-    graphql,
-    make_pr,
-    search_prs,
-)
+from . import gh_graphql as ghgql
 from .stack import Stack
 
 GH_SCHEME = "git@github.com:"
@@ -85,12 +71,12 @@ class GH:
                 break
         self.__prs = None
 
-    def getPRs(self, branch_name: str) -> list[PR]:
+    def getPRs(self, branch_name: str) -> list[ghgql.PR]:
         if self.__prs is None:
             self.__prs = self._search_stack_prs()
-        return self.__prs.get(branch_name, list[PR]())
+        return self.__prs.get(branch_name, list[ghgql.PR]())
 
-    def is_sync(self, remote_pr: PR, record: Stack) -> bool:
+    def is_sync(self, remote_pr: ghgql.PR, record: Stack) -> bool:
         if not record.get_parent():
             return True
         for pr in self.getPRs(record.branch_name):
@@ -105,10 +91,10 @@ class GH:
                     return False
         return True
 
-    def unresolved(pr: PR) -> dict[Author, list[Comment]]:
+    def unresolved(pr: ghgql.PR) -> dict[ghgql.Author, list[ghgql.Comment]]:
         result = [thread for thread in pr.threads.data if not thread.resolved]
 
-        def author_reacted(thread: ReviewThread) -> bool:
+        def author_reacted(thread: ghgql.ReviewThread) -> bool:
             if not thread.comments.data:
                 logging.debug("no comments?")
                 return False
@@ -125,7 +111,7 @@ class GH:
             logging.debug("author didn't react")
             return False
 
-        def author_commented(thread: ReviewThread) -> bool:
+        def author_commented(thread: ghgql.ReviewThread) -> bool:
             commented = (
                 thread.comments.data
                 and thread.comments.data[-1].author.login == pr.author.login
@@ -135,7 +121,7 @@ class GH:
             )
             return commented
 
-        comments: dict[Author, list[Comment]] = {}
+        comments: dict[ghgql.Author, list[ghgql.Comment]] = {}
         for thread in filter(
             lambda cd: not author_commented(cd) and not author_reacted(cd),
             result,
@@ -149,15 +135,15 @@ class GH:
 
     @dataclass
     class PRStats:
-        unresolved: dict[Author, list[Comment]]
-        change_requested: list[Review]
-        approved: list[Review]
+        unresolved: dict[ghgql.Author, list[ghgql.Comment]]
+        change_requested: list[ghgql.Review]
+        approved: list[ghgql.Review]
         in_sync: bool
 
-    def pr_stats(self, record: Stack) -> dict[PR, PRStats]:
-        stats: dict[PR, GH.PRStats] = {}
+    def pr_stats(self, record: Stack) -> dict[ghgql.PR, PRStats]:
+        stats: dict[ghgql.PR, GH.PRStats] = {}
         for pr in self.getPRs(record.branch_name):
-            authors: dict[str, Review] = {}
+            authors: dict[str, ghgql.Review] = {}
             for r in pr.reviews.data:
                 authors[r.author.login] = r
             nr = GH.unresolved(pr)
@@ -169,13 +155,13 @@ class GH:
             stats[pr] = GH.PRStats(nr, cr, approved, sync)
         return stats
 
-    def _find_stack_comment(self, pr: PR) -> Comment | None:
+    def _find_stack_comment(self, pr: ghgql.PR) -> ghgql.Comment | None:
         for comment in pr.comments.data:
             if comment.body.startswith(COMMENT_FIRST_LINE):
                 return comment
         return None
 
-    def _make_stack_comment(self, remote_pr: PR) -> str:
+    def _make_stack_comment(self, remote_pr: ghgql.PR) -> str:
         md = [COMMENT_FIRST_LINE, ""]
         for record in self.stack.traverse():
             prs = self.getPRs(record.branch_name)
@@ -189,8 +175,8 @@ class GH:
                 md.append("  " * record.depth + f"* {record.branch_name}")
         return "\n".join(md)
 
-    def _search_stack_prs(self) -> dict[str, list[PR]]:
-        prs = dict[str, list[PR]]()
+    def _search_stack_prs(self) -> dict[str, list[ghgql.PR]]:
+        prs = dict[str, list[ghgql.PR]]()
         for record in self.stack.traverse():
             if not record.get_parent():
                 prs[record.branch_name] = []
@@ -200,16 +186,18 @@ class GH:
             for record in self.stack.traverse()
             if record.get_parent() or not record.length()
         ]
-        for pr in search_prs(self.token, self.owner, self.repository, heads):
+        for pr in ghgql.search_prs(
+            self.token, self.owner, self.repository, heads
+        ):
             if pr.head not in prs:
-                prs.update({pr.head: [pr]})
+                prs.update({pr.head: [ghgql.pr]})
             else:
                 prs[pr.head].append(pr)
 
         logging.debug("Query done.")
         return prs
 
-    def comment(self, pr: PR) -> bool:
+    def comment(self, pr: ghgql.PR) -> bool:
         logging.debug(f"commenting pr #{pr.number}")
         comment = self._find_stack_comment(pr)
         md = self._make_stack_comment(pr)
@@ -218,25 +206,27 @@ class GH:
             return
         md = json.dumps(md, ensure_ascii=False)
         if comment:
-            graphql(
+            ghgql.graphql(
                 self.token,
-                GQL_UPDATE_COMMENT(gql.input(id=f'"{comment.id}"', body=md)),
+                ghgql.GQL_UPDATE_COMMENT(
+                    gql.input(id=f'"{comment.id}"', body=md)
+                ),
             )
             return False
-        graphql(
+        ghgql.graphql(
             self.token,
-            GQL_ADD_COMMENT(gql.input(subjectId=f'"{pr.id}"', body=md)),
+            ghgql.GQL_ADD_COMMENT(gql.input(subjectId=f'"{pr.id}"', body=md)),
         )
         return True
 
-    def update_pr(self, record: Stack, pr: PR) -> None:
+    def update_pr(self, record: Stack, pr: ghgql.PR) -> None:
         base = record.get_parent().branch_name
         if pr.base == base:
             return
         logging.debug(f"updating PR base from {pr.base} to {base}")
-        graphql(
+        ghgql.graphql(
             self.token,
-            GQL_UPDATE_PR_BASE(
+            ghgql.GQL_UPDATE_PR_BASE(
                 gql.input(pullRequestId=f'"{pr.id}"', baseRefName=f'"{base}"')
             ),
         )
@@ -244,14 +234,16 @@ class GH:
 
     def create_pr(
         self, base: str, branch_name: str, title: str = "", draft: bool = False
-    ) -> PR:
+    ) -> ghgql.PR:
         logging.debug(f"creating PR wiht base {base} and head {branch_name}")
         base_branch = self.repo.lookup_branch(base)
         if not base_branch.upstream:
             raise Exception(f"Base branch {base} has no upstream.")
-        repo_id_json = graphql(
+        repo_id_json = ghgql.graphql(
             self.token,
-            GQL_GET_REPO_ID(owner=self.owner, repository=self.repository),
+            ghgql.GQL_GET_REPO_ID(
+                owner=self.owner, repository=self.repository
+            ),
         )
 
         repository_id = repo_id_json["data"]["repository"]["id"]
@@ -260,9 +252,9 @@ class GH:
         draft = "true" if draft else "false"
         body = json.dumps(self.template, ensure_ascii=False)
 
-        pr_json = graphql(
+        pr_json = ghgql.graphql(
             self.token,
-            GQL_CREATE_PR(
+            ghgql.GQL_CREATE_PR(
                 gql.input(
                     repositoryId=f'"{repository_id}"',
                     baseRefName=f'"{base}"',
@@ -273,13 +265,13 @@ class GH:
                 )
             ),
         )
-        pr = make_pr(
+        pr = ghgql.make_pr(
             {"node": pr_json["data"]["createPullRequest"]["pullRequest"]}
         )
         if branch_name in self.__prs:
             self.__prs[branch_name].append(pr)
         else:
-            self.__prs.update({branch_name: [pr]})
+            self.__prs.update({branch_name: [ghgql.pr]})
         self.comment(pr)
         return pr
 
