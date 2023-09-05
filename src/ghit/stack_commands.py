@@ -2,11 +2,11 @@ from collections.abc import Iterator
 
 import pygit2 as git
 
+from . import styling as s
 from .args import Args
 from .common import BadResult, connect, push_and_pr
 from .gitools import last_commits
 from .stack import Stack
-from . import styling as s
 
 
 def _check_stack(

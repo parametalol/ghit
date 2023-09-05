@@ -1,11 +1,13 @@
-import pygit2 as git
 import os
-from .stack import Stack, open_stack
-from .gitools import get_current_branch, MyRemoteCallback
+
+import pygit2 as git
+
 from . import styling as s
-from .gh import initGH, GH
-from .gh_formatting import pr_number_with_style
 from .args import Args
+from .gh import GH, initGH
+from .gh_formatting import pr_number_with_style
+from .gitools import MyRemoteCallback, get_current_branch
+from .stack import Stack, open_stack
 
 __connections: tuple[git.Repository, Stack, GH] = None
 

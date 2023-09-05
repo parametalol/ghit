@@ -7,8 +7,8 @@ from urllib.parse import ParseResult, urlparse
 
 import pygit2 as git
 
-from . import graphql as gql
 from . import gh_graphql as ghgql
+from . import graphql as gql
 from .stack import Stack
 
 GH_SCHEME = "git@github.com:"
@@ -203,7 +203,7 @@ class GH:
         md = self._make_stack_comment(pr)
         if comment and comment.body == md:
             logging.debug("comment is up to date")
-            return
+            return None
         md = json.dumps(md, ensure_ascii=False)
         if comment:
             ghgql.graphql(

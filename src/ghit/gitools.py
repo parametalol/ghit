@@ -1,5 +1,7 @@
 from collections.abc import Iterator
+
 import pygit2 as git
+
 from . import styling as s
 from .stack import Stack
 

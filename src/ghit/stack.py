@@ -1,7 +1,11 @@
 from __future__ import annotations
-import os
-from collections.abc import Iterator
+
 import logging
+import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 class Stack:
@@ -66,7 +70,9 @@ class Stack:
                     yield record
             depth -= 1
 
-    def dumps(self, lines: list[str] = []):
+    def dumps(self, lines: list[str] = None):
+        if lines is None:
+            lines = []
         if not self.is_root():
             lines.append(
                 ("" if self._enabled else "#")

@@ -1,10 +1,10 @@
-from collections.abc import Iterator, Callable
+from collections.abc import Callable, Iterator
 from datetime import datetime
-from .gh_graphql import PR, Review, Author, Comment
-from .stack import Stack
+
 from . import styling as s
 from .gh import GH
-
+from .gh_graphql import PR, Author, Comment, Review
+from .stack import Stack
 
 # region style
 
@@ -78,16 +78,15 @@ def _format_not_sync(gh: GH, record: Stack, pr: PR) -> Iterator[str]:
     if not record.get_parent():
         return
     for p in gh.getPRs(record.branch_name):
-        if p.number == pr.number:
-            if p.base != record.get_parent().branch_name:
-                yield s.with_style(
-                    "dim",
-                    s.warning("⟳ PR base ")
-                    + s.emphasis(p.base)
-                    + s.warning(" doesn't match branch parent ")
-                    + s.emphasis(record.get_parent().branch_name)
-                    + s.warning("."),
-                )
+        if p.number == pr.number and p.base != record.get_parent().branch_name:
+            yield s.with_style(
+                "dim",
+                s.warning("⟳ PR base ")
+                + s.emphasis(p.base)
+                + s.warning(" doesn't match branch parent ")
+                + s.emphasis(record.get_parent().branch_name)
+                + s.warning("."),
+            )
 
 
 def _format_change_requested(

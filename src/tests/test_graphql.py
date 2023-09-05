@@ -30,28 +30,22 @@ class TestClass:
 
 class TestGraphQL(unittest.TestCase):
     def test_fields(self):
-        self.assertEqual("a b c", fields("a", "b", "c"))
-        self.assertEqual("", fields())
+        assert fields("a", "b", "c") == "a b c"
+        assert fields() == ""
 
     def test_on(self):
-        self.assertEqual("... on x{  }", on("x"))
-        self.assertEqual("... on x{ y }", on("x", "y"))
+        assert on("x") == "... on x{  }"
+        assert on("x", "y") == "... on x{ y }"
 
     def test_obj(self):
-        self.assertEqual("x{ y }", obj("x", "y"))
-        self.assertEqual("x{ a b }", obj("x", "a", "b"))
-        self.assertEqual("x{ a b }", obj("x", fields("a", "b")))
+        assert obj("x", "y") == "x{ y }"
+        assert obj("x", "a", "b") == "x{ a b }"
+        assert obj("x", fields("a", "b")) == "x{ a b }"
 
     def test_func(self):
-        self.assertEqual(
-            'f(a: 1, b: "word"){ c d }',
-            func("f", {"a": 1, "b": '"word"'}, "c", "d"),
-        )
+        assert func("f", {"a": 1, "b": '"word"'}, "c", "d") == 'f(a: 1, b: "word"){ c d }'
 
-        self.assertEqual(
-            'f(a: 1, b: "word"){ c{ d } e{ f } }',
-            func("f", {"a": 1, "b": '"word"'}, obj("c", "d"), obj("e", "f")),
-        )
+        assert func("f", {"a": 1, "b": '"word"'}, obj("c", "d"), obj("e", "f")) == 'f(a: 1, b: "word"){ c{ d } e{ f } }'
         f = func(
             "func",
             {"a": 1, "b": '"word"'},
@@ -59,22 +53,14 @@ class TestGraphQL(unittest.TestCase):
             obj("edges", "cursor", obj("node", *["1", "2"])),
         )
 
-        self.assertEqual(
-            'func(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } '
-            + "edges{ cursor node{ 1 2 } } }",
-            f,
-        )
+        assert 'func(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } ' + "edges{ cursor node{ 1 2 } } }" == f
 
     def test_paged(self):
-        self.assertEqual(
-            'object(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } '
-            + "edges{ cursor node{ c d } } }",
-            paged("object", {"a": 1, "b": '"word"'}, "c", "d"),
-        )
+        assert 'object(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } ' + "edges{ cursor node{ c d } } }" == paged("object", {"a": 1, "b": '"word"'}, "c", "d")
 
     def test_cursor_or_null(self):
-        self.assertEqual('"x"', cursor_or_null("x"))
-        self.assertEqual("null", cursor_or_null(None))
+        assert cursor_or_null("x") == '"x"'
+        assert cursor_or_null(None) == "null"
 
     def test_input(self):
         self.assertDictEqual({"input": "{ a: a, b: b }"}, input(a="a", b="b"))
@@ -121,12 +107,12 @@ class TestGraphQL(unittest.TestCase):
 
         tcs = Pages("search", make_tc)
         tcs.append_all(lambda c: response["data"])
-        self.assertEqual(1, len(tcs.data))
-        self.assertEqual("test one", tcs.data[0].value)
-        self.assertEqual(1, len(tcs.data[0].subclasses.data))
-        self.assertEqual("subtest one", tcs.data[0].subclasses.data[0].value)
+        assert len(tcs.data) == 1
+        assert tcs.data[0].value == "test one"
+        assert len(tcs.data[0].subclasses.data) == 1
+        assert tcs.data[0].subclasses.data[0].value == "subtest one"
 
-        self.assertFalse(tcs.data[0].subclasses.complete())
+        assert not tcs.data[0].subclasses.complete()
 
         tcs.data[0].subclasses.append_all(
             lambda c: {
@@ -149,15 +135,13 @@ class TestGraphQL(unittest.TestCase):
                 }
             }["data"]["testClass"]
         )
-        self.assertEqual(2, len(tcs.data[0].subclasses.data))
-        self.assertEqual("subtest two", tcs.data[0].subclasses.data[1].value)
+        assert len(tcs.data[0].subclasses.data) == 2
+        assert tcs.data[0].subclasses.data[1].value == "subtest two"
 
     def test_path(self):
-        self.assertEqual("abc", path({"a": "abc"}, "a"))
-        self.assertEqual("abc", path(["abc"], 0))
-        self.assertEqual(
-            "abc", path({"a": {"b": ["x", "y", "abc"]}}, "a", "b", -1)
-        )
+        assert path({"a": "abc"}, "a") == "abc"
+        assert path(["abc"], 0) == "abc"
+        assert path({"a": {"b": ["x", "y", "abc"]}}, "a", "b", -1) == "abc"
 
     def test_edges(self):
         data = {
@@ -176,7 +160,7 @@ class TestGraphQL(unittest.TestCase):
         }
 
         e = next(edges(data, "subClasses"))
-        self.assertEqual("C", e["cursor"])
+        assert e["cursor"] == "C"
 
     def test_cursor(self):
         data = {
@@ -197,10 +181,10 @@ class TestGraphQL(unittest.TestCase):
                 ],
             },
         }
-        self.assertEqual("B", last_edge_cursor(data, "subClasses"))
+        assert last_edge_cursor(data, "subClasses") == "B"
         c, has_next = end_cursor(data, "subClasses")
-        self.assertEqual("C", c)
-        self.assertFalse(has_next)
+        assert c == "C"
+        assert not has_next
         data["subClasses"]["pageInfo"]["hasNextPage"] = True
         c, has_next = end_cursor(data, "subClasses")
-        self.assertTrue(has_next)
+        assert has_next

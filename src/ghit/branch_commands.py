@@ -1,12 +1,12 @@
+from . import styling as s
 from .common import (
     Args,
-    connect,
     BadResult,
+    connect,
     push_and_pr,
     stack_filename,
 )
-from . import styling as s
-from .gitools import get_current_branch, checkout
+from .gitools import checkout, get_current_branch
 
 
 def branch_submit(args: Args) -> None:

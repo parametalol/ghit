@@ -2,13 +2,13 @@ import os
 
 import pygit2 as git
 
+from . import styling as s
 from .args import Args
 from .common import BadResult, connect, stack_filename
-from .gitools import checkout, get_current_branch
-from .stack import Stack, open_stack
-from . import styling as s
 from .gh import GH
 from .gh_formatting import format_info
+from .gitools import checkout, get_current_branch
+from .stack import Stack, open_stack
 
 
 def _parent_tab(record: Stack) -> str:
@@ -71,7 +71,7 @@ def ls(args: Args) -> None:
             print()
 
     if error:
-        raise BadResult()
+        raise BadResult
 
 
 def _print_line(
@@ -146,7 +146,7 @@ def _move(args: Args, command: str) -> None:
                 try:
                     record = next(i)
                 except StopIteration:
-                    return
+                    return None
             break
         p = record
 
@@ -155,7 +155,7 @@ def _move(args: Args, command: str) -> None:
             checkout(repo, record)
     else:
         return _jump(args, "top")
-    return
+    return None
 
 
 def up(args: Args) -> None:

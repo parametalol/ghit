@@ -3,10 +3,10 @@ import logging
 import os
 import sys
 
-from .common import BadResult
 from . import branch_commands as bcom
 from . import stack_commands as scom
 from . import top_commands as top
+from .common import BadResult
 
 
 def add_top_commands(parser: argparse.ArgumentParser):

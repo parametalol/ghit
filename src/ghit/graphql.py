@@ -1,6 +1,6 @@
 import logging
-from typing import TypeVar, Generic, Callable
 from collections.abc import Iterator
+from typing import Callable, Generic, TypeVar
 
 # region builder
 
@@ -105,8 +105,7 @@ def path(obj: any, *keys: str | int) -> any:
 def edges(obj: any, name: str) -> Iterator[any]:
     edges = path(obj, name, "edges")
     if edges:
-        for edge in edges:
-            yield edge
+        yield from edges
 
 
 def last_edge_cursor(obj: any, field: str) -> str:

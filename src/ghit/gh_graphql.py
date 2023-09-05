@@ -1,10 +1,12 @@
-from dataclasses import dataclass
-from typing import Callable
-from datetime import datetime
 import logging
 import os
-import requests
 import sys
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Callable
+
+import requests
+
 from . import graphql as gql
 
 # region query
@@ -431,8 +433,10 @@ def graphql(token: str, query: str) -> any:
 
 
 def search_prs(
-    token: str, owner: str, repository: str, branches: list[str] = []
+    token: str, owner: str, repository: str, branches: list[str] = None
 ) -> list[PR]:
+    if branches is None:
+        branches = []
     if not branches:
         return []
 
