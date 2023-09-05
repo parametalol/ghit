@@ -13,9 +13,9 @@ def branch_submit(args: Args) -> None:
     repo, stack, gh = connect(args)
     if not gh:
         return
-    origin = repo.remotes["origin"]
+    origin = repo.remotes['origin']
     if not origin:
-        raise BadResult(s.danger("No origin found for the repository."))
+        raise BadResult(s.danger('No origin found for the repository.'))
     current = get_current_branch(repo)
     for record in stack.traverse():
         if record.branch_name == current.branch_name:
@@ -41,9 +41,9 @@ def create(args: Args) -> None:
     branch = repo.lookup_branch(args.branch)
     if branch:
         raise BadResult(
-            s.danger("Branch ")
+            s.danger('Branch ')
             + s.emphasis(args.branch)
-            + s.danger(" already exists."),
+            + s.danger(' already exists.'),
         )
     branch = repo.branches.local.create(
         name=args.branch, commit=repo.get(repo.head.target)
@@ -53,5 +53,5 @@ def create(args: Args) -> None:
 
     lines = []
     stack.dumps(lines)
-    with open(args.stack or stack_filename(repo), "w") as ghit_stack:
-        ghit_stack.write("\n".join(lines) + "\n")
+    with open(args.stack or stack_filename(repo), 'w') as ghit_stack:
+        ghit_stack.write('\n'.join(lines) + '\n')

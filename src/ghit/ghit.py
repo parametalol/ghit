@@ -13,73 +13,73 @@ def add_top_commands(parser: argparse.ArgumentParser):
     commands = parser.add_subparsers(required=True)
 
     commands.add_parser(
-        "init",
-        help="create `.ghit.stack` file with the current branch, "
-        + "and add it to `.gitignore`",
+        'init',
+        help='create `.ghit.stack` file with the current branch, '
+        + 'and add it to `.gitignore`',
     ).set_defaults(func=top.init)
 
     commands.add_parser(
-        "ls",
-        help="show the branches of stack with",
+        'ls',
+        help='show the branches of stack with',
     ).set_defaults(func=top.ls)
     commands.add_parser(
-        "up",
-        help="check out one branch up the stack",
+        'up',
+        help='check out one branch up the stack',
     ).set_defaults(func=top.up)
     commands.add_parser(
-        "down", help="check out one branch down the stack"
+        'down', help='check out one branch down the stack'
     ).set_defaults(func=top.down)
     commands.add_parser(
-        "top",
-        help="check out the top of the stack",
+        'top',
+        help='check out the top of the stack',
     ).set_defaults(func=top.top)
     commands.add_parser(
-        "bottom", help="check out the bottom of the stack"
+        'bottom', help='check out the bottom of the stack'
     ).set_defaults(func=top.bottom)
     return commands
 
 
 def add_stack_commands(parser: argparse.ArgumentParser):
     parser_stack_sub = parser.add_subparsers()
-    parser_stack_sub.add_parser("check").set_defaults(func=scom.check)
+    parser_stack_sub.add_parser('check').set_defaults(func=scom.check)
     parser_stack_sub.add_parser(
-        "submit",
-        help="push stack branches upstream and update PRs",
+        'submit',
+        help='push stack branches upstream and update PRs',
     ).set_defaults(func=scom.stack_submit)
 
 
 def add_branch_commands(parser: argparse.ArgumentParser) -> None:
     parser_branch_sub = parser.add_subparsers()
     cr = parser_branch_sub.add_parser(
-        "create", help="create branch, set remote upstream, update stack file"
+        'create', help='create branch, set remote upstream, update stack file'
     )
-    cr.add_argument("branch", help="branch name to create")
+    cr.add_argument('branch', help='branch name to create')
     cr.set_defaults(func=bcom.create)
 
     upr = parser_branch_sub.add_parser(
-        "submit",
-        help="push branch upstream, create a PR or update the existing PR(s)",
+        'submit',
+        help='push branch upstream, create a PR or update the existing PR(s)',
     )
-    upr.add_argument("-t", "--title", help="PR title")
+    upr.add_argument('-t', '--title', help='PR title')
     upr.add_argument(
-        "-d", "--draft", help="create draft PR", action="store_true"
+        '-d', '--draft', help='create draft PR', action='store_true'
     )
     upr.set_defaults(func=bcom.branch_submit)
 
 
 def ghit(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("-r", "--repository", default=".")
+    parser.add_argument('-r', '--repository', default='.')
     parser.add_argument(
-        "-s", "--stack", default=os.getenv("GHIT_STACK") or ".ghit.stack"
+        '-s', '--stack', default=os.getenv('GHIT_STACK') or '.ghit.stack'
     )
-    parser.add_argument("-o", "--offline", action="store_true")
-    parser.add_argument("-g", "--debug", action="store_true")
-    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument('-o', '--offline', action='store_true')
+    parser.add_argument('-g', '--debug', action='store_true')
+    parser.add_argument('-v', '--verbose', action='store_true')
 
     commands = add_top_commands(parser)
-    add_stack_commands(commands.add_parser("stack", aliases=["s", "st"]))
-    add_branch_commands(commands.add_parser("branch", aliases=["b", "br"]))
+    add_stack_commands(commands.add_parser('stack', aliases=['s', 'st']))
+    add_branch_commands(commands.add_parser('branch', aliases=['b', 'br']))
 
     args = parser.parse_args(args=argv)
     if args.debug:
@@ -100,6 +100,6 @@ def ghit(argv: list[str]) -> int:
                 print(msg, file=sys.stderr)
             return 1
         except Exception as e:
-            print("Error:", e)
+            print('Error:', e)
             return 2
     return 0

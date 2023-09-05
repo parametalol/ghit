@@ -7,13 +7,13 @@ from .stack import Stack
 
 
 def get_git_ssh_credentials() -> git.credentials.KeypairFromAgent:
-    return git.KeypairFromAgent("git")
+    return git.KeypairFromAgent('git')
 
 
 class MyRemoteCallback(git.RemoteCallbacks):
     def __init__(self, credentials=None, certificate=None):
         super().__init__(credentials or get_git_ssh_credentials(), certificate)
-        self.message = ""
+        self.message = ''
 
     def push_update_reference(self, refname, message):
         self.message = message
@@ -22,9 +22,9 @@ class MyRemoteCallback(git.RemoteCallbacks):
 
 def get_default_branch(repo: git.Repository) -> str:
     remote_head = (
-        repo.references["refs/remotes/origin/HEAD"].resolve().shorthand
+        repo.references['refs/remotes/origin/HEAD'].resolve().shorthand
     )
-    return remote_head.removeprefix("origin/")
+    return remote_head.removeprefix('origin/')
 
 
 def get_current_branch(repo: git.Repository) -> git.Branch:
@@ -49,15 +49,15 @@ def print_branch_info(
     a, _ = repo.ahead_behind(parent_branch.target, branch.target)
     if a:
         print(
-            "This branch has fallen back behind "
+            'This branch has fallen back behind '
             + s.emphasis(record.get_parent().branch_name)
-            + "."
+            + '.'
         )
-        print("You may want to restack to pick up the following commits:")
+        print('You may want to restack to pick up the following commits:')
         for commit in last_commits(repo, parent_branch.target, a):
             print(
                 s.inactive(
-                    f"\t[{commit.short_id}] " + commit.message.splitlines()[0]
+                    f'\t[{commit.short_id}] ' + commit.message.splitlines()[0]
                 )
             )
 
@@ -72,26 +72,26 @@ def print_upstream_info(repo: git.Repository, branch: git.Branch) -> None:
     )
     if a:
         print(
-            "Following local commits are missing in upstream "
+            'Following local commits are missing in upstream '
             + s.emphasis(branch.upstream.branch_name)
-            + ":"
+            + ':'
         )
         for commit in last_commits(repo, branch.target, a):
             print(
                 s.inactive(
-                    f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"
+                    f'\t[{commit.short_id}] {commit.message.splitlines()[0]}'
                 )
             )
     if b:
         print(
-            "Following upstream commits are missing in local "
+            'Following upstream commits are missing in local '
             + s.emphasis(branch.branch_name)
-            + ":"
+            + ':'
         )
         for commit in last_commits(repo, branch.upstream.target, b):
             print(
                 s.inactive(
-                    f"\t[{commit.short_id}] {commit.message.splitlines()[0]}"
+                    f'\t[{commit.short_id}] {commit.message.splitlines()[0]}'
                 )
             )
 
@@ -101,19 +101,19 @@ def checkout(repo: git.Repository, record: Stack) -> None:
     branch = repo.branches.get(branch_name) if branch_name else None
     if not branch:
         print(
-            s.danger("Error:"),
+            s.danger('Error:'),
             s.emphasis(branch_name),
-            s.danger("not found in local."),
+            s.danger('not found in local.'),
         )
-        remote = repo.branches.remote["origin/" + branch_name]
+        remote = repo.branches.remote['origin/' + branch_name]
         if remote:
             print(
-                "There is though a remote branch "
+                'There is though a remote branch '
                 + s.emphasis(remote.branch_name)
-                + "."
+                + '.'
             )
         return
     repo.checkout(branch)
-    print(f"Checked-out {s.emphasis(branch.branch_name)}.")
+    print(f'Checked-out {s.emphasis(branch.branch_name)}.')
     print_branch_info(repo, record, branch)
     print_upstream_info(repo, branch)

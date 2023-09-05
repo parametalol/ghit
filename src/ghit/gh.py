@@ -11,49 +11,49 @@ from . import gh_graphql as ghgql
 from . import graphql as gql
 from .stack import Stack
 
-GH_SCHEME = "git@github.com:"
+GH_SCHEME = 'git@github.com:'
 
-GH_TEMPLATES = [".github", "docs", ""]
+GH_TEMPLATES = ['.github', 'docs', '']
 
-COMMENT_FIRST_LINE = "Current dependencies on/for this PR:"
+COMMENT_FIRST_LINE = 'Current dependencies on/for this PR:'
 
 
 def get_gh_owner_repository(url: ParseResult) -> (str, str):
-    _, owner, repository = url.path.split("/", 2)
-    return owner, repository.removesuffix(".git")
+    _, owner, repository = url.path.split('/', 2)
+    return owner, repository.removesuffix('.git')
 
 
 def get_gh_url(repo: git.Repository) -> ParseResult:
-    url: str = repo.remotes["origin"].url
+    url: str = repo.remotes['origin'].url
     if url.startswith(GH_SCHEME):
-        insteadof = repo.config["url.git@github.com:.insteadof"]
+        insteadof = repo.config['url.git@github.com:.insteadof']
         url = insteadof + url.removeprefix(GH_SCHEME)
     return urlparse(url)
 
 
 def get_gh_token(url: ParseResult) -> str:
-    token = os.getenv("GITHUB_TOKEN")
+    token = os.getenv('GITHUB_TOKEN')
     if token:
         return token
     p = subprocess.run(
-        args=["git", "credential", "fill"],
-        input=f"protocol={url.scheme}\nhost={url.netloc}\n",
+        args=['git', 'credential', 'fill'],
+        input=f'protocol={url.scheme}\nhost={url.netloc}\n',
         capture_output=True,
         text=True,
     )
     credentials = {}
     if p.returncode == 0:
         for line in p.stdout.splitlines():
-            k, v = line.split("=", 1)
+            k, v = line.split('=', 1)
             credentials[k] = v
-    return credentials["password"]
+    return credentials['password']
 
 
 def is_gh(repo: git.Repository) -> bool:
     if repo.is_empty or repo.is_bare:
         return False
     url = get_gh_url(repo)
-    return url.netloc.find("github.com") >= 0
+    return url.netloc.find('github.com') >= 0
 
 
 class GH:
@@ -65,7 +65,7 @@ class GH:
         self.token = get_gh_token(self.url)
         self.template: str | None = None
         for t in GH_TEMPLATES:
-            filename = os.path.join(repo.path, t, "pull_request_template.md")
+            filename = os.path.join(repo.path, t, 'pull_request_template.md')
             if os.path.exists(filename):
                 self.template = open(filename).read()
                 break
@@ -85,7 +85,7 @@ class GH:
                     logging.debug(
                         "remote PR base doesn't match: "
                         + remote_pr.base
-                        + " vs "
+                        + ' vs '
                         + record.get_parent().branch_name
                     )
                     return False
@@ -96,16 +96,16 @@ class GH:
 
         def author_reacted(thread: ghgql.ReviewThread) -> bool:
             if not thread.comments.data:
-                logging.debug("no comments?")
+                logging.debug('no comments?')
                 return False
             for reaction in thread.comments.data[-1].reactions.data:
                 if (
                     reaction.author.login == pr.author.login
-                    and reaction.content not in ["EYES", "CONFUSED"]
+                    and reaction.content not in ['EYES', 'CONFUSED']
                 ):
                     logging.debug(
-                        f"{thread.comments.data[-1].id}"
-                        + f" author reacted with {reaction.content}"
+                        f'{thread.comments.data[-1].id}'
+                        + f' author reacted with {reaction.content}'
                     )
                     return True
             logging.debug("author didn't react")
@@ -117,7 +117,7 @@ class GH:
                 and thread.comments.data[-1].author.login == pr.author.login
             )
             logging.debug(
-                f"{thread.comments.data[-1].id} author commented={commented}"
+                f'{thread.comments.data[-1].id} author commented={commented}'
             )
             return commented
 
@@ -148,9 +148,9 @@ class GH:
                 authors[r.author.login] = r
             nr = GH.unresolved(pr)
             cr = [
-                r for r in authors.values() if r.state == "CHANGES_REQUESTED"
+                r for r in authors.values() if r.state == 'CHANGES_REQUESTED'
             ]
-            approved = [r for r in authors.values() if r.state == "APPROVED"]
+            approved = [r for r in authors.values() if r.state == 'APPROVED']
             sync = self.is_sync(pr, record)
             stats[pr] = GH.PRStats(nr, cr, approved, sync)
         return stats
@@ -162,18 +162,18 @@ class GH:
         return None
 
     def _make_stack_comment(self, remote_pr: ghgql.PR) -> str:
-        md = [COMMENT_FIRST_LINE, ""]
+        md = [COMMENT_FIRST_LINE, '']
         for record in self.stack.traverse():
             prs = self.getPRs(record.branch_name)
             if prs:
                 for pr in prs:
-                    line = "  " * record.depth + f"* **PR #{pr.number}**"
+                    line = '  ' * record.depth + f'* **PR #{pr.number}**'
                     if pr.number == remote_pr.number:
-                        line += " 👈"
+                        line += ' 👈'
                     md.append(line)
             else:
-                md.append("  " * record.depth + f"* {record.branch_name}")
-        return "\n".join(md)
+                md.append('  ' * record.depth + f'* {record.branch_name}')
+        return '\n'.join(md)
 
     def _search_stack_prs(self) -> dict[str, list[ghgql.PR]]:
         prs = dict[str, list[ghgql.PR]]()
@@ -194,15 +194,15 @@ class GH:
             else:
                 prs[pr.head].append(pr)
 
-        logging.debug("Query done.")
+        logging.debug('Query done.')
         return prs
 
     def comment(self, pr: ghgql.PR) -> bool:
-        logging.debug(f"commenting pr #{pr.number}")
+        logging.debug(f'commenting pr #{pr.number}')
         comment = self._find_stack_comment(pr)
         md = self._make_stack_comment(pr)
         if comment and comment.body == md:
-            logging.debug("comment is up to date")
+            logging.debug('comment is up to date')
             return None
         md = json.dumps(md, ensure_ascii=False)
         if comment:
@@ -223,7 +223,7 @@ class GH:
         base = record.get_parent().branch_name
         if pr.base == base:
             return
-        logging.debug(f"updating PR base from {pr.base} to {base}")
+        logging.debug(f'updating PR base from {pr.base} to {base}')
         ghgql.graphql(
             self.token,
             ghgql.GQL_UPDATE_PR_BASE(
@@ -233,12 +233,12 @@ class GH:
         pr.base = base
 
     def create_pr(
-        self, base: str, branch_name: str, title: str = "", draft: bool = False
+        self, base: str, branch_name: str, title: str = '', draft: bool = False
     ) -> ghgql.PR:
-        logging.debug(f"creating PR wiht base {base} and head {branch_name}")
+        logging.debug(f'creating PR wiht base {base} and head {branch_name}')
         base_branch = self.repo.lookup_branch(base)
         if not base_branch.upstream:
-            raise Exception(f"Base branch {base} has no upstream.")
+            raise Exception(f'Base branch {base} has no upstream.')
         repo_id_json = ghgql.graphql(
             self.token,
             ghgql.GQL_GET_REPO_ID(
@@ -246,10 +246,10 @@ class GH:
             ),
         )
 
-        repository_id = repo_id_json["data"]["repository"]["id"]
-        head = f"{self.owner}:{branch_name}"
+        repository_id = repo_id_json['data']['repository']['id']
+        head = f'{self.owner}:{branch_name}'
         title = json.dumps(title or branch_name, ensure_ascii=False)
-        draft = "true" if draft else "false"
+        draft = 'true' if draft else 'false'
         body = json.dumps(self.template, ensure_ascii=False)
 
         pr_json = ghgql.graphql(
@@ -266,7 +266,7 @@ class GH:
             ),
         )
         pr = ghgql.make_pr(
-            {"node": pr_json["data"]["createPullRequest"]["pullRequest"]}
+            {'node': pr_json['data']['createPullRequest']['pullRequest']}
         )
         if branch_name in self.__prs:
             self.__prs[branch_name].append(pr)
@@ -279,7 +279,7 @@ class GH:
 def initGH(repo: git.Repository, stack: Stack, offline: bool) -> GH | None:
     gh = GH(repo, stack) if not offline and is_gh(repo) else None
     if gh:
-        logging.debug(f"found gh repository {gh.repository}")
+        logging.debug(f'found gh repository {gh.repository}')
     else:
-        logging.debug("gh not found")
+        logging.debug('gh not found')
     return gh

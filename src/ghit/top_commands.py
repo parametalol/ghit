@@ -12,7 +12,7 @@ from .stack import Stack, open_stack
 
 
 def _parent_tab(record: Stack) -> str:
-    return "  " if record.is_last_child() else "│ "
+    return '  ' if record.is_last_child() else '│ '
 
 
 def _print_gh_info(
@@ -29,14 +29,14 @@ def _print_gh_info(
         info.extend(list(format_info(gh, verbose, record, pr, stats)))
 
     if len(info) == 1:
-        print(" " + info[0])
+        print(' ' + info[0])
     else:
         print()
         for i in info:
             print(
-                " ",
+                ' ',
                 *parent_prefix,
-                "│   " if record.length() else "    ",
+                '│   ' if record.length() else '    ',
                 i,
             )
     return error
@@ -81,7 +81,7 @@ def _print_line(
     record: Stack,
 ) -> None:
     line_color = s.calm if current else s.normal
-    line = [line_color("⯈" if current else " "), *parent_prefix]
+    line = [line_color('⯈' if current else ' '), *parent_prefix]
 
     behind = 0
     branch = repo.branches.get(record.branch_name)
@@ -96,14 +96,14 @@ def _print_line(
             else:
                 behind = 0
 
-        g1 = "└" if record.is_last_child() else "├"
-        g2 = "⭦" if behind else "─"
+        g1 = '└' if record.is_last_child() else '├'
+        g2 = '⭦' if behind else '─'
         line.append(g1 + g2)
 
     line.append(
         (s.deleted if not branch else s.warning if behind else line_color)(
             s.with_style(
-                "bold",
+                'bold',
                 record.branch_name,
             )
             if current
@@ -112,7 +112,7 @@ def _print_line(
     )
 
     if behind != 0:
-        line.append(s.warning(f"({behind} behind)"))
+        line.append(s.warning(f'({behind} behind)'))
 
     if branch:
         if branch.upstream:
@@ -123,14 +123,14 @@ def _print_line(
             if a or b:
                 line.append(
                     s.with_style(
-                        "dim",
-                        "↕" if a and b else "↑" if a else "↓",
+                        'dim',
+                        '↕' if a and b else '↑' if a else '↓',
                     )
                 )
         else:
-            line.append(line_color("*"))
+            line.append(line_color('*'))
 
-    print(*line, end="")
+    print(*line, end='')
 
 
 def _move(args: Args, command: str) -> None:
@@ -140,7 +140,7 @@ def _move(args: Args, command: str) -> None:
     p = None
     for record in i:
         if record.branch_name == current:
-            if command == "up":
+            if command == 'up':
                 record = p
             else:
                 try:
@@ -154,21 +154,21 @@ def _move(args: Args, command: str) -> None:
         if record.branch_name != current:
             checkout(repo, record)
     else:
-        return _jump(args, "top")
+        return _jump(args, 'top')
     return None
 
 
 def up(args: Args) -> None:
-    return _move(args, "up")
+    return _move(args, 'up')
 
 
 def down(args: Args) -> None:
-    return _move(args, "down")
+    return _move(args, 'down')
 
 
 def _jump(args: Args, command: str) -> None:
     repo, stack, _ = connect(args)
-    if command == "top":
+    if command == 'top':
         try:
             record = next(stack.traverse())
         except StopIteration:
@@ -182,11 +182,11 @@ def _jump(args: Args, command: str) -> None:
 
 
 def top(args: Args) -> None:
-    return _jump(args, "top")
+    return _jump(args, 'top')
 
 
 def bottom(args: Args) -> None:
-    return _jump(args, "bottom")
+    return _jump(args, 'bottom')
 
 
 def init(args: Args) -> None:
@@ -200,8 +200,8 @@ def init(args: Args) -> None:
     if os.path.commonpath(
         [filename, repopath]
     ) == repopath and not repo.path_is_ignored(filename):
-        with open(os.path.join(repopath, ".gitignore"), "a") as gitignore:
-            gitignore.write(os.path.basename(filename) + "\n")
+        with open(os.path.join(repopath, '.gitignore'), 'a') as gitignore:
+            gitignore.write(os.path.basename(filename) + '\n')
 
-    with open(filename, "w") as ghitstack:
-        ghitstack.write(get_current_branch(repo).branch_name + "\n")
+    with open(filename, 'w') as ghitstack:
+        ghitstack.write(get_current_branch(repo).branch_name + '\n')

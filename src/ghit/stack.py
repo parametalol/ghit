@@ -75,8 +75,8 @@ class Stack:
             lines = []
         if not self.is_root():
             lines.append(
-                ("" if self._enabled else "#")
-                + "." * (self.depth - 1)
+                ('' if self._enabled else '#')
+                + '.' * (self.depth - 1)
                 + self.branch_name
             )
         for record in self._children.values():
@@ -91,19 +91,19 @@ def open_stack(filename: str) -> Stack | None:
     with open(filename) as f:
         for line in f.readlines():
             line = line.rstrip()
-            logging.debug(f"reading line {line}")
-            logging.debug(f"parents: {[p.branch_name for p in parents]}")
+            logging.debug(f'reading line {line}')
+            logging.debug(f'parents: {[p.branch_name for p in parents]}')
 
-            enabled = not line.startswith("#")
-            line = line.lstrip("#")
-            branch_name = line.lstrip(".")
+            enabled = not line.startswith('#')
+            line = line.lstrip('#')
+            branch_name = line.lstrip('.')
             if not branch_name:
                 continue
             depth = len(line) - len(branch_name)
             logging.debug(
-                f"parsed: {enabled} {branch_name} {depth}."
+                f'parsed: {enabled} {branch_name} {depth}.'
             )
-            logging.debug(f"current parent: {parents[-1].branch_name}.")
+            logging.debug(f'current parent: {parents[-1].branch_name}.')
 
             for _ in range(1, len(parents) - depth):
                 parents.pop()
