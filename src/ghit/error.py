@@ -1,0 +1,2 @@
+class GhitError(Exception):
+    pass

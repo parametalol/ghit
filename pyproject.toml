@@ -1,3 +1,29 @@
+[project]
+name = 'ghit-smartptr'
+version = '0.0.7'
+readme = 'README.md'
+requires-python = '>=3.9,<4.0'
+
 [build-system]
-requires = ["setuptools>=43.0.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ['setuptools>=43.0.0', 'wheel']
+build-backend = 'setuptools.build_meta'
+
+[tool.ruff]
+select = ['E', 'F', 'W', 'I', 'YTT', 'FA', 'ISC', 'ICN', 'G', 'C90', 'N', 'UP', 'S', 'B', 'C4', 'DTZ', 'DJ', 'PIE', 'T20', 'PT', 'Q', 'RSE', 'RET', 'SIM', 'TID', 'TCH', 'INT', 'PTH', 'PL']
+line-length = 120
+target-version = 'py39'
+ignore = ['TCH003', 'TCH001']
+
+[tool.ruff.per-file-ignores]
+'*/tests/*' = ['S101']
+
+[tool.ruff.pylint]
+max-args = 8
+
+[tool.ruff.flake8-quotes]
+inline-quotes = 'single'
+
+[tool.black]
+line-length = 120
+target-version = ['py39']
+skip-string-normalization = true

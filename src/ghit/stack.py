@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,9 +30,7 @@ class Stack:
 
     def add_child(self, branch_name: str, enabled: bool = True) -> Stack:
         if branch_name in self._children:
-            raise Exception(
-                f"'{branch_name}' already exist in '{self.branch_name}'"
-            )
+            raise Exception(f"'{branch_name}' already exist in '{self.branch_name}'")
         child = Stack(branch_name, enabled, self)
         self._children.update({branch_name: child})
         return child
@@ -47,11 +45,7 @@ class Stack:
         return self.__parent is None
 
     def traverse(self, with_first_level: bool = True) -> Iterator[Stack]:
-        if (
-            not self.is_root()
-            and self._enabled
-            and (self.get_parent() or with_first_level)
-        ):
+        if not self.is_root() and self._enabled and (self.get_parent() or with_first_level):
             yield self
         for r in self._children.values():
             yield from r.traverse(with_first_level)
@@ -74,36 +68,29 @@ class Stack:
         if lines is None:
             lines = []
         if not self.is_root():
-            lines.append(
-                ('' if self._enabled else '#')
-                + '.' * (self.depth - 1)
-                + self.branch_name
-            )
+            lines.append(('' if self._enabled else '#') + '.' * (self.depth - 1) + self.branch_name)
         for record in self._children.values():
             record.dumps(lines)
 
 
-def open_stack(filename: str) -> Stack | None:
-    if not os.path.isfile(filename):
+def open_stack(filename: Path | None) -> Stack | None:
+    if filename is None or not filename.is_file():
         return None
     stack = Stack()
     parents = [stack]
-    with open(filename) as f:
+    with filename.open() as f:
         for line in f.readlines():
-            line = line.rstrip()
-            logging.debug(f'reading line {line}')
-            logging.debug(f'parents: {[p.branch_name for p in parents]}')
+            stack_line = line.rstrip()
+            logging.debug('reading line [%s]', stack_line)
 
-            enabled = not line.startswith('#')
-            line = line.lstrip('#')
-            branch_name = line.lstrip('.')
+            enabled = not stack_line.startswith('#')
+            stack_line = stack_line.lstrip('#')
+            branch_name = stack_line.lstrip('.')
             if not branch_name:
                 continue
-            depth = len(line) - len(branch_name)
-            logging.debug(
-                f'parsed: {enabled} {branch_name} {depth}.'
-            )
-            logging.debug(f'current parent: {parents[-1].branch_name}.')
+            depth = len(stack_line) - len(branch_name)
+            logging.debug('parsed: %s [%s] %d', enabled, branch_name, depth)
+            logging.debug('current parent [%s]', parents[-1].branch_name)
 
             for _ in range(1, len(parents) - depth):
                 parents.pop()

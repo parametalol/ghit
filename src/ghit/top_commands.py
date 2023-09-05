@@ -1,10 +1,13 @@
 import os
+from pathlib import Path
 
 import pygit2 as git
 
 from . import styling as s
+from . import terminal
 from .args import Args
-from .common import BadResult, connect, stack_filename
+from .common import connect, stack_filename
+from .error import GhitError
 from .gh import GH
 from .gh_formatting import format_info
 from .gitools import checkout, get_current_branch
@@ -29,11 +32,11 @@ def _print_gh_info(
         info.extend(list(format_info(gh, verbose, record, pr, stats)))
 
     if len(info) == 1:
-        print(' ' + info[0])
+        terminal.stdout(' ' + info[0])
     else:
-        print()
+        terminal.stdout()
         for i in info:
-            print(
+            terminal.stdout(
                 ' ',
                 *parent_prefix,
                 '│   ' if record.length() else '    ',
@@ -55,9 +58,7 @@ def ls(args: Args) -> None:
     for record in stack.traverse():
         parent_prefix = parent_prefix[: record.depth - 2]
 
-        _print_line(
-            repo, record.branch_name == checked_out, parent_prefix, record
-        )
+        _print_line(repo, record.branch_name == checked_out, parent_prefix, record)
 
         if record.get_parent():
             parent_prefix.append(_parent_tab(record))
@@ -68,10 +69,10 @@ def ls(args: Args) -> None:
                 _print_gh_info(args.verbose, gh, parent_prefix, record),
             )
         else:
-            print()
+            terminal.stdout()
 
     if error:
-        raise BadResult
+        raise GhitError
 
 
 def _print_line(
@@ -130,7 +131,7 @@ def _print_line(
         else:
             line.append(line_color('*'))
 
-    print(*line, end='')
+    terminal.stdout(*line, end='')
 
 
 def _move(args: Args, command: str) -> None:
@@ -138,8 +139,9 @@ def _move(args: Args, command: str) -> None:
     current = get_current_branch(repo).branch_name
     i = stack.traverse()
     p = None
-    for record in i:
-        if record.branch_name == current:
+    record = None
+    for r in i:
+        if r.branch_name == current:
             if command == 'up':
                 record = p
             else:
@@ -148,7 +150,7 @@ def _move(args: Args, command: str) -> None:
                 except StopIteration:
                     return None
             break
-        p = record
+        p = r
 
     if record:
         if record.branch_name != current:
@@ -168,14 +170,15 @@ def down(args: Args) -> None:
 
 def _jump(args: Args, command: str) -> None:
     repo, stack, _ = connect(args)
+    record: Stack = None
     if command == 'top':
         try:
             record = next(stack.traverse())
         except StopIteration:
             return
     else:
-        for record in stack.traverse():
-            pass
+        for r in stack.traverse():
+            record = r
     if record and record.branch_name != get_current_branch(repo).branch_name:
         checkout(repo, record)
     return
@@ -191,17 +194,15 @@ def bottom(args: Args) -> None:
 
 def init(args: Args) -> None:
     repo = git.Repository(args.repository)
-    repopath = os.path.dirname(os.path.abspath(repo.path))
+    repopath = Path(repo.path).resolve().parent
     filename = stack_filename(repo)
-    stack = open_stack(args.stack or filename)
+    stack = open_stack(Path(args.stack) if args.stack else filename)
     if stack:
         return
 
-    if os.path.commonpath(
-        [filename, repopath]
-    ) == repopath and not repo.path_is_ignored(filename):
-        with open(os.path.join(repopath, '.gitignore'), 'a') as gitignore:
-            gitignore.write(os.path.basename(filename) + '\n')
+    if os.path.commonpath([filename, repopath]) == repopath and not repo.path_is_ignored(filename):
+        with (repopath / '.gitignore').open('a') as gitignore:
+            gitignore.write(filename.name + '\n')
 
-    with open(filename, 'w') as ghitstack:
+    with filename.open('w') as ghitstack:
         ghitstack.write(get_current_branch(repo).branch_name + '\n')

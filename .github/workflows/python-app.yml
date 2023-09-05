@@ -16,18 +16,21 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python 3.11
+    - name: Set up Python 3.9
       uses: actions/setup-python@v4
       with:
-        python-version: "3.11"
+        python-version: "3.9"
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pygit2 requests
-    - name: Lint with flake8
+        pip install flake8 ruff pygit2 requests
+    - name: Check with flake8
       run: |
-        flake8 src --max-complexity=10 --max-line-length=79 \
+        flake8 src --max-complexity=10 --max-line-length=120 \
           --count --show-source --statistics
+    - name: Check with ruff
+      run: |
+        ruff check src
     - name: Run unittest
       run: |
         python -m unittest discover -s src -v

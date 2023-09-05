@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import logging
 import os
-import sys
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
@@ -8,6 +9,7 @@ from typing import Callable
 import requests
 
 from . import graphql as gql
+from . import terminal
 
 # region query
 
@@ -52,14 +54,10 @@ GQL_PR = gql.fields(
 
 
 def first_n_after(name: str, q: str, n: int, after: str, **opts):
-    return gql.paged(
-        name, {'first': n, 'after': gql.cursor_or_null(after), **opts}, q
-    )
+    return gql.paged(name, {'first': n, 'after': gql.cursor_or_null(after), **opts}, q)
 
 
-def GQL_PRS_QUERY(
-    owner: str, repository: str, heads: list[str], after: str | None = None
-):
+def make_prs_query(owner: str, repository: str, heads: list[str], after: str | None = None):
     return gql.query(
         'query search_prs',
         first_n_after(
@@ -127,9 +125,7 @@ GQL_PR_THREAD_COMMENTS_QUERY = pr_details_query(
     ),
 )
 
-GQL_PR_COMMITS_QUERY = pr_details_query(
-    'pr_commits', lambda after: first_n_after('commits', GQL_COMMIT, 10, after)
-)
+GQL_PR_COMMITS_QUERY = pr_details_query('pr_commits', lambda after: first_n_after('commits', GQL_COMMIT, 10, after))
 
 GQL_PR_COMMIT_COMMENTS_QUERY = pr_details_query(
     'pr_threads_comments',
@@ -156,12 +152,10 @@ GQL_PR_COMMIT_COMMENT_REACTIONS_QUERY = pr_details_query(
     ),
 )
 
-GQL_PR_REVIEWS_QUERY = pr_details_query(
-    'pr_reviews', lambda after: first_n_after('reviews', GQL_REVIEW, 40, after)
-)
+GQL_PR_REVIEWS_QUERY = pr_details_query('pr_reviews', lambda after: first_n_after('reviews', GQL_REVIEW, 40, after))
 
 
-def GQL_GET_REPO_ID(owner: str, repository: str) -> str:
+def make_repo_id_query(owner: str, repository: str) -> str:
     return gql.query(
         'query get_repo_id',
         gql.func(
@@ -177,21 +171,21 @@ def GQL_GET_REPO_ID(owner: str, repository: str) -> str:
 # region mutations
 
 
-def GQL_ADD_COMMENT(comment_input: any) -> str:
+def make_add_comment_query(comment_input: any) -> str:
     return gql.query(
         'mutation add_pr_comment',
         gql.func('addComment', comment_input, 'clientMutationId'),
     )
 
 
-def GQL_UPDATE_COMMENT(comment_input: any) -> str:
+def make_update_comment_query(comment_input: any) -> str:
     return gql.query(
         'mutation update_pr_comment',
         gql.func('updateIssueComment', comment_input, 'clientMutationId'),
     )
 
 
-def GQL_CREATE_PR(pr_input: any) -> str:
+def make_create_pr_query(pr_input: any) -> str:
     return gql.query(
         'mutation create_pr',
         gql.func(
@@ -203,7 +197,7 @@ def GQL_CREATE_PR(pr_input: any) -> str:
     )
 
 
-def GQL_UPDATE_PR_BASE(pr_input: any) -> str:
+def make_update_pr_base_query(pr_input: any) -> str:
     return gql.query(
         'mutation update_pr',
         gql.func(
@@ -334,7 +328,6 @@ def query_pr_comments(owner: str, repository: str, pr: int) -> str:
 
 
 def _make_comment(edge: any) -> Comment:
-    logging.debug(f'found comment: {edge}')
     node = edge['node']
     return Comment(
         id=node['id'],
@@ -350,7 +343,6 @@ def _make_comment(edge: any) -> Comment:
 
 def _make_review(edge: any) -> Review:
     node = edge['node']
-    logging.debug(f"found {node['state']} review by {node['author']['login']}")
     return Review(
         author=_make_author(node['author']),
         state=node['state'],
@@ -389,9 +381,7 @@ def make_pr(edge: any) -> PR:
         locked=node['locked'],
         closed=node['closed'],
         merged=node['merged'],
-        merged_at=datetime.fromisoformat(node['mergedAt'])
-        if node['merged']
-        else None,
+        merged_at=datetime.fromisoformat(node['mergedAt']) if node['merged'] else None,
         state=node['state'],
         base=node['baseRefName'],
         head=node['headRefName'],
@@ -406,7 +396,7 @@ def make_pr(edge: any) -> PR:
 
 
 def graphql(token: str, query: str) -> any:
-    logging.debug(f'query GH graphql: {query}')
+    logging.debug('query GH graphql: %s', query)
     response = requests.post(
         url=os.getenv('GITHUB_API_URL', 'https://api.github.com/graphql'),
         headers={
@@ -415,26 +405,25 @@ def graphql(token: str, query: str) -> any:
             'X-GitHub-Api-Version': '2022-11-28',
         },
         json={'query': query},
+        timeout=30,
     )
-    logging.debug(f'response: {response.status_code}')
+    logging.debug('response: %s', response.status_code)
     if not response.ok:
         raise BaseException(response.text)
     result = response.jsgql.on()
-    logging.debug(f'response json: {result}')
+    logging.debug('response json: %s', result)
     if 'errors' in result:
         for error in result['errors']:
             if 'type' in error:
-                print(f"{error['type']}: {error['message']}", file=sys.stderr)
+                terminal.stderr(f"{error['type']}: {error['message']}")
             else:
-                print(error['message'], file=sys.stderr)
+                terminal.stderr(error['message'])
 
         raise BaseException('errors in GraphQL response')
     return result
 
 
-def search_prs(
-    token: str, owner: str, repository: str, branches: list[str] = None
-) -> list[PR]:
+def search_prs(token: str, owner: str, repository: str, branches: list[str] = None) -> list[PR]:
     if branches is None:
         branches = []
     if not branches:
@@ -442,14 +431,14 @@ def search_prs(
 
     heads = ' '.join(f'head:{branch}' for branch in branches)
 
-    prsPages = gql.Pages('search', make_pr)
-    prsPages.append_all(
+    prs_pages = gql.Pages('search', make_pr)
+    prs_pages.append_all(
         lambda after: gql.path(
-            graphql(token, GQL_PRS_QUERY(owner, repository, heads, after)),
+            graphql(token, make_prs_query(owner, repository, heads, after)),
             'data',
         )
     )
-    prs = prsPages.data
+    prs = prs_pages.data
     pr_path = ['data', 'repository', 'pullRequest']
     for pr in prs:
         _fetch_level_one(token, owner, repository, pr_path, pr)
@@ -460,9 +449,7 @@ def search_prs(
     return prs
 
 
-def _fetch_level_one(
-    token: str, owner: str, repository: str, pr_path: list[str], pr: PR
-):
+def _fetch_level_one(token: str, owner: str, repository: str, pr_path: list[str], pr: PR):
     pr.comments.append_all(
         lambda after: gql.path(
             graphql(
@@ -501,17 +488,13 @@ def _fetch_level_one(
     )
 
 
-def _fetch_level_two(
-    token: str, owner: str, repository: str, pr_path: list[str], pr: PR
-):
+def _fetch_level_two(token: str, owner: str, repository: str, pr_path: list[str], pr: PR):
     for comment in pr.comments.data:
         comment.reactions.append_all(
-            lambda after: gql.path(
+            lambda after, cc=comment.cursor: gql.path(
                 graphql(
                     token,
-                    GQL_PR_COMMENT_REACTIONS_QUERY(
-                        owner, repository, pr.number, comment.cursor, after
-                    ),
+                    GQL_PR_COMMENT_REACTIONS_QUERY(owner, repository, pr.number, cc, after),
                     *pr_path,
                     'comments',
                 )
@@ -519,12 +502,10 @@ def _fetch_level_two(
         )
     for thread in pr.threads.data:
         thread.comments.append_all(
-            lambda after: gql.path(
+            lambda after, tc=thread.cursor: gql.path(
                 graphql(
                     token,
-                    GQL_PR_THREAD_COMMENTS_QUERY(
-                        owner, repository, pr.number, thread.cursor, after
-                    ),
+                    GQL_PR_THREAD_COMMENTS_QUERY(owner, repository, pr.number, tc, after),
                 ),
                 *pr_path,
                 'reviewThreads',
@@ -539,9 +520,7 @@ def _fetch_level_two(
             lambda after: gql.path(
                 graphql(
                     token,
-                    GQL_PR_COMMIT_COMMENTS_QUERY(
-                        owner, repository, pr.number, after
-                    ),
+                    GQL_PR_COMMIT_COMMENTS_QUERY(owner, repository, pr.number, after),
                 ),
                 *pr_path,
                 'commits',
@@ -553,18 +532,14 @@ def _fetch_level_two(
         )
 
 
-def _fetch_level_three(
-    token: str, owner: str, repository: str, pr_path: list[str], pr: PR
-):
+def _fetch_level_three(token: str, owner: str, repository: str, pr_path: list[str], pr: PR):
     for thread in pr.threads.data:
         for comment in thread.comments.data:
             comment.reactions.append_all(
-                lambda after: gql.path(
+                lambda after, cc=comment.cursor: gql.path(
                     graphql(
                         token,
-                        GQL_PR_COMMENT_REACTIONS_QUERY(
-                            owner, repository, pr.number, comment.cursor, after
-                        ),
+                        GQL_PR_COMMENT_REACTIONS_QUERY(owner, repository, pr.number, cc, after),
                     ),
                     *pr_path,
                     'comments',
@@ -576,15 +551,15 @@ def _fetch_level_three(
     for commit in pr.commits.data:
         for comment in commit.comments.data:
             comment.reactions.append_all(
-                lambda after: gql.path(
+                lambda after, cic=commit.cursor, coc=comment.cursor: gql.path(
                     graphql(
                         token,
                         GQL_PR_COMMIT_COMMENT_REACTIONS_QUERY(
                             owner,
                             repository,
                             pr.number,
-                            commit.cursor,
-                            comment.cursor,
+                            cic,
+                            coc,
                             after,
                         ),
                     ),

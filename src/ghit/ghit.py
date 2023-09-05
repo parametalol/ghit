@@ -1,12 +1,12 @@
 import argparse
 import logging
 import os
-import sys
 
 from . import branch_commands as bcom
 from . import stack_commands as scom
+from . import terminal
 from . import top_commands as top
-from .common import BadResult
+from .common import GhitError
 
 
 def add_top_commands(parser: argparse.ArgumentParser):
@@ -14,8 +14,7 @@ def add_top_commands(parser: argparse.ArgumentParser):
 
     commands.add_parser(
         'init',
-        help='create `.ghit.stack` file with the current branch, '
-        + 'and add it to `.gitignore`',
+        help='create `.ghit.stack` file with the current branch, and add it to `.gitignore`',
     ).set_defaults(func=top.init)
 
     commands.add_parser(
@@ -26,16 +25,12 @@ def add_top_commands(parser: argparse.ArgumentParser):
         'up',
         help='check out one branch up the stack',
     ).set_defaults(func=top.up)
-    commands.add_parser(
-        'down', help='check out one branch down the stack'
-    ).set_defaults(func=top.down)
+    commands.add_parser('down', help='check out one branch down the stack').set_defaults(func=top.down)
     commands.add_parser(
         'top',
         help='check out the top of the stack',
     ).set_defaults(func=top.top)
-    commands.add_parser(
-        'bottom', help='check out the bottom of the stack'
-    ).set_defaults(func=top.bottom)
+    commands.add_parser('bottom', help='check out the bottom of the stack').set_defaults(func=top.bottom)
     return commands
 
 
@@ -50,9 +45,7 @@ def add_stack_commands(parser: argparse.ArgumentParser):
 
 def add_branch_commands(parser: argparse.ArgumentParser) -> None:
     parser_branch_sub = parser.add_subparsers()
-    cr = parser_branch_sub.add_parser(
-        'create', help='create branch, set remote upstream, update stack file'
-    )
+    cr = parser_branch_sub.add_parser('create', help='create branch, set remote upstream, update stack file')
     cr.add_argument('branch', help='branch name to create')
     cr.set_defaults(func=bcom.create)
 
@@ -61,18 +54,14 @@ def add_branch_commands(parser: argparse.ArgumentParser) -> None:
         help='push branch upstream, create a PR or update the existing PR(s)',
     )
     upr.add_argument('-t', '--title', help='PR title')
-    upr.add_argument(
-        '-d', '--draft', help='create draft PR', action='store_true'
-    )
+    upr.add_argument('-d', '--draft', help='create draft PR', action='store_true')
     upr.set_defaults(func=bcom.branch_submit)
 
 
 def ghit(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--repository', default='.')
-    parser.add_argument(
-        '-s', '--stack', default=os.getenv('GHIT_STACK') or '.ghit.stack'
-    )
+    parser.add_argument('-s', '--stack', default=os.getenv('GHIT_STACK') or '.ghit.stack')
     parser.add_argument('-o', '--offline', action='store_true')
     parser.add_argument('-g', '--debug', action='store_true')
     parser.add_argument('-v', '--verbose', action='store_true')
@@ -86,20 +75,20 @@ def ghit(argv: list[str]) -> int:
         logging.getLogger().setLevel(logging.DEBUG)
         try:
             args.func(args)
-        except BadResult as br:
+        except GhitError as br:
             msg = str(br)
             if msg:
-                print(msg, file=sys.stderr)
+                terminal.stderr(msg)
             return 1
     else:
         try:
             args.func(args)
-        except BadResult as br:
+        except GhitError as br:
             msg = str(br)
             if msg:
-                print(msg, file=sys.stderr)
+                terminal.stderr(msg)
             return 1
         except Exception as e:
-            print('Error:', e)
+            terminal.stderr('Error:', e)
             return 2
     return 0

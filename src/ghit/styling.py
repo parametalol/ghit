@@ -1,4 +1,3 @@
-
 COLORS: dict[str, int] = {
     'black': 30,
     'red': 31,

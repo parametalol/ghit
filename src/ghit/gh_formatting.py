@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Callable, Iterator
 from datetime import datetime
 
@@ -21,9 +23,7 @@ def _pr_state_style(pr: PR) -> Callable[[str], str]:
 
 
 def pr_number_with_style(pr: PR) -> str:
-    number = s.with_style(
-        'dim', _pr_state_style(pr)(f'#{pr.number} ({pr.state})')
-    )
+    number = s.with_style('dim', _pr_state_style(pr)(f'#{pr.number} ({pr.state})'))
     return ('🔒' if pr.locked else '') + number
 
 
@@ -34,9 +34,7 @@ def pr_title_with_style(pr: PR) -> str:
 # endregion style
 
 
-def format_info(
-    gh: GH, verbose: bool, record: Stack, pr: PR, stats: GH.PRStats
-) -> Iterator[str]:
+def format_info(gh: GH, verbose: bool, record: Stack, pr: PR, stats: GH.PRStats) -> Iterator[str]:
     pr_state = []
     if not verbose:
         if stats.unresolved:
@@ -77,7 +75,7 @@ def _format_approved(approved: list[Review]) -> Iterator[str]:
 def _format_not_sync(gh: GH, record: Stack, pr: PR) -> Iterator[str]:
     if not record.get_parent():
         return
-    for p in gh.getPRs(record.branch_name):
+    for p in gh.get_prs(record.branch_name):
         if p.number == pr.number and p.base != record.get_parent().branch_name:
             yield s.with_style(
                 'dim',
@@ -93,49 +91,35 @@ def _format_change_requested(
     change_requested: list[Review],
 ) -> Iterator[str]:
     for review in change_requested:
-        yield s.with_style(
-            'dim', s.danger('✗ Changes requested by ')
-        ) + s.with_style(
+        yield s.with_style('dim', s.danger('✗ Changes requested by ')) + s.with_style(
             'italic', s.danger(str(review.author))
-        ) + s.with_style(
-            'dim', s.danger(':')
-        )
+        ) + s.with_style('dim', s.danger(':'))
 
         yield f'  {s.colorful(review.url)}'
 
 
 def _late_commment_sign(comment: Comment, merged_at: datetime | None) -> str:
-    return (
-        ''
-        if not merged_at or merged_at > comment.created_at
-        else s.warning('+ ')
-    )
+    return '' if not merged_at or merged_at > comment.created_at else s.warning('+ ')
 
 
-def _format_not_resolved(
-    nr: dict[Author, list[Comment]], merged_at: datetime | None
-) -> Iterator[str]:
+def _format_not_resolved(nr: dict[Author, list[Comment]], merged_at: datetime | None) -> Iterator[str]:
     for author, comments in nr.items():
         if len(comments) == 1:
             yield s.with_style(
                 'dim',
                 s.warning('! No reaction to a comment by '),
-            ) + s.with_style('italic', s.warning(str(author))) + s.with_style(
-                'dim', s.warning(':')
-            )
-            yield '  ' + _late_commment_sign(
-                comments[0], merged_at
-            ) + s.colorful(comments[0].url)
+            ) + s.with_style(
+                'italic', s.warning(str(author))
+            ) + s.with_style('dim', s.warning(':'))
+            yield '  ' + _late_commment_sign(comments[0], merged_at) + s.colorful(comments[0].url)
 
         else:
             yield s.with_style(
                 'dim',
                 s.warning('! No reaction to comments by '),
-            ) + s.with_style('italic', s.warning(str(author))) + s.with_style(
-                'dim', s.warning(':')
-            )
+            ) + s.with_style(
+                'italic', s.warning(str(author))
+            ) + s.with_style('dim', s.warning(':'))
 
             for i, comment in enumerate(comments, start=1):
-                yield '  ' + s.warning(f'{i}. ') + _late_commment_sign(
-                    comment, merged_at
-                ) + s.colorful(comment.url)
+                yield '  ' + s.warning(f'{i}. ') + _late_commment_sign(comment, merged_at) + s.colorful(comment.url)

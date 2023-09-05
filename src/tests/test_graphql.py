@@ -56,16 +56,18 @@ class TestGraphQL(unittest.TestCase):
         assert 'func(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } ' + 'edges{ cursor node{ 1 2 } } }' == f
 
     def test_paged(self):
-        assert 'object(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } ' + 'edges{ cursor node{ c d } } }' == paged('object', {'a': 1, 'b': '"word"'}, 'c', 'd')
+        assert 'object(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } ' + 'edges{ cursor node{ c d } } }' == paged(
+            'object', {'a': 1, 'b': '"word"'}, 'c', 'd'
+        )
 
     def test_cursor_or_null(self):
         assert cursor_or_null('x') == '"x"'
         assert cursor_or_null(None) == 'null'
 
     def test_input(self):
-        self.assertDictEqual({'input': '{ a: a, b: b }'}, input(a='a', b='b'))
+        assert input(a='a', b='b') == {'input': '{ a: a, b: b }'}
 
-    def test_Pages(self):
+    def test_pages_class(self):
         response = {
             'data': {
                 'search': {
@@ -135,7 +137,7 @@ class TestGraphQL(unittest.TestCase):
                 }
             }['data']['testClass']
         )
-        assert len(tcs.data[0].subclasses.data) == 2
+        assert len(tcs.data[0].subclasses.data) == 2  # noqa: PLR2004
         assert tcs.data[0].subclasses.data[1].value == 'subtest two'
 
     def test_path(self):

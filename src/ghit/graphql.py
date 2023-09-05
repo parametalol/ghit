@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from collections.abc import Iterator
 from typing import Callable, Generic, TypeVar
@@ -50,9 +52,7 @@ class Pages(Generic[T]):
         self.name = name
         self.obj_ctor = obj_ctor
         self.next_cursor: str = last_edge_cursor(node, name)
-        self.end_cursor, self.has_next_page = (
-            end_cursor(node, name) if node else (None, True)
-        )
+        self.end_cursor, self.has_next_page = end_cursor(node, name) if node else (None, True)
         self.data = list(map(obj_ctor, edges(node, name))) if node else []
 
     def complete(self) -> bool:
@@ -60,11 +60,9 @@ class Pages(Generic[T]):
 
     def append_all(self, next_page) -> None:
         while not self.complete():
-            logging.debug(
-                f'querying {self.name} after cursor {self.next_cursor}'
-            )
+            logging.debug('querying %s after cursor %s', self.name, self.next_cursor)
             data = next_page(self.next_cursor)
-            logging.debug(f'data={data}')
+            logging.debug('data=%s', data)
             if not data:
                 raise Exception('No data in response')
             self.end_cursor, self.has_next_page = end_cursor(data, self.name)
@@ -72,7 +70,7 @@ class Pages(Generic[T]):
             self.data.extend(new_data)
             self.next_cursor = last_edge_cursor(data, self.name)
             if not self.has_next_page:
-                logging.debug(f'queried all {self.name}')
+                logging.debug('queried all %s', self.name)
 
 
 # region helpers
@@ -115,9 +113,7 @@ def last_edge_cursor(obj: any, field: str) -> str:
 def end_cursor(obj: any, field: str) -> tuple[str, bool]:
     if not obj:
         return None, False
-    return path(obj, field, 'pageInfo', 'endCursor'), bool(
-        path(obj, field, 'pageInfo', 'hasNextPage')
-    )
+    return path(obj, field, 'pageInfo', 'endCursor'), bool(path(obj, field, 'pageInfo', 'hasNextPage'))
 
 
 # endregion helpers

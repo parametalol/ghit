@@ -3,8 +3,9 @@ from collections.abc import Iterator
 import pygit2 as git
 
 from . import styling as s
+from . import terminal
 from .args import Args
-from .common import BadResult, connect, push_and_pr
+from .common import GhitError, connect, push_and_pr
 from .gitools import last_commits
 from .stack import Stack
 
@@ -33,7 +34,7 @@ def check(args: Args) -> None:
     repo, stack, _ = connect(args)
     for notsync in _check_stack(repo, stack):
         record, a = notsync
-        print(
+        terminal.stdout(
             s.warning('🗶'),
             s.emphasis(record.get_parent().branch_name),
             s.warning('is ahead of'),
@@ -45,13 +46,13 @@ def check(args: Args) -> None:
         )
 
         for commit in last_commits(repo, parent_ref.target, a):
-            print(
+            terminal.stdout(
                 s.inactive(
                     f'\t[{commit.short_id}] {commit.message.splitlines()[0]}'
                 )
             )
 
-        print(
+        terminal.stdout(
             '  Run `git rebase -i '
             + record.get_parent().branch_name
             + ' '
@@ -60,9 +61,9 @@ def check(args: Args) -> None:
         )
 
     if not notsync:
-        print(s.good('🗸 The stack is in shape.'))
+        terminal.stdout(s.good('🗸 The stack is in shape.'))
     else:
-        raise BadResult(s.warning('The stack is not in shape.'))
+        raise GhitError(s.warning('The stack is not in shape.'))
 
 
 def stack_submit(args: Args) -> None:
@@ -71,7 +72,7 @@ def stack_submit(args: Args) -> None:
         return
     origin = repo.remotes['origin']
     if not origin:
-        raise BadResult(s.warning('No origin found for the repository.'))
+        raise GhitError(s.warning('No origin found for the repository.'))
 
     for record in stack.traverse(False):
         push_and_pr(repo, gh, origin, record)
