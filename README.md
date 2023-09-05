@@ -36,6 +36,12 @@ Example Flow
 ------------
 ```console
 localhost:my-git-repo (main)$ ghit init
+localhost:my-git-repo (main)$ cat .ghit.stack 
+main
+localhost:my-git-repo (main)$ git add .gitignore
+localhost:my-git-repo (main)$ git commit -m "add .ghit.stack to .gitignore"
+```
+```console
 localhost:my-git-repo (main)$ ghit branch create new-feature
 Checked-out new-feature.
 The branch doesn't have an upstream.
