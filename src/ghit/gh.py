@@ -169,7 +169,7 @@ class GH:
         heads = [record.branch_name for record in self.stack.traverse() if record.get_parent() or not record.length()]
         for pr in ghgql.search_prs(self.token, self.owner, self.repository, heads):
             if pr.head not in prs:
-                prs.update({pr.head: [ghgql.pr]})
+                prs.update({pr.head: [pr]})
             else:
                 prs[pr.head].append(pr)
 
@@ -240,7 +240,7 @@ class GH:
         if branch_name in self.__prs:
             self.__prs[branch_name].append(pr)
         else:
-            self.__prs.update({branch_name: [ghgql.pr]})
+            self.__prs.update({branch_name: [pr]})
         self.comment(pr)
         return pr
 

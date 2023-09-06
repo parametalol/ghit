@@ -38,6 +38,7 @@ GQL_PR = gql.fields(
     'id',
     'title',
     GQL_AUTHOR,
+    'url',
     'baseRefName',
     'headRefName',
     'isDraft',
@@ -410,7 +411,7 @@ def graphql(token: str, query: str) -> any:
     logging.debug('response: %s', response.status_code)
     if not response.ok:
         raise BaseException(response.text)
-    result = response.jsgql.on()
+    result = response.json()
     logging.debug('response json: %s', result)
     if 'errors' in result:
         for error in result['errors']:
