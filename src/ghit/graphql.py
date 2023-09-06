@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
-from typing import Callable, Generic, TypeVar
+from typing import TYPE_CHECKING, Callable, Generic, TypeVar
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 # region builder
 

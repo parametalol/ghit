@@ -6,7 +6,7 @@ from . import branch_commands as bcom
 from . import stack_commands as scom
 from . import terminal
 from . import top_commands as top
-from .common import GhitError
+from .error import GhitError
 
 
 def add_top_commands(parser: argparse.ArgumentParser):

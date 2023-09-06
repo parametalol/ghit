@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
-from datetime import datetime
+from typing import TYPE_CHECKING
 
 from . import styling as s
-from .gh import GH
-from .gh_graphql import PR, Author, Comment, Review
-from .stack import Stack
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+    from datetime import datetime
+
+    from .gh import GH
+    from .gh_graphql import PR, Author, Comment, Review
+    from .stack import Stack
 
 # region style
 

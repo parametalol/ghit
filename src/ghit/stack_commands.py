@@ -5,7 +5,8 @@ import pygit2 as git
 from . import styling as s
 from . import terminal
 from .args import Args
-from .common import GhitError, connect, push_and_pr
+from .common import connect, push_and_pr
+from .error import GhitError
 from .gitools import last_commits
 from .stack import Stack
 

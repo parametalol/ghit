@@ -12,10 +12,11 @@ from urllib.parse import ParseResult, urlparse
 from . import gh_graphql as ghgql
 from . import graphql as gql
 from .error import GhitError
-from .stack import Stack
 
 if TYPE_CHECKING:
     import pygit2 as git
+
+    from .stack import Stack
 
 GH_SCHEME = 'git@github.com:'
 

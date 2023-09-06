@@ -3,11 +3,11 @@ from pathlib import Path
 from . import styling as s
 from .common import (
     Args,
-    GhitError,
     connect,
     push_and_pr,
     stack_filename,
 )
+from .error import GhitError
 from .gitools import checkout, get_current_branch
 
 
