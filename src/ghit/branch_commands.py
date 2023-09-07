@@ -32,22 +32,26 @@ def branch_submit(args: Args) -> None:
 
 def create(args: Args) -> None:
     repo, stack, _ = connect(args)
-    current = get_current_branch(repo)
-    for record in stack.traverse(True):
-        if record.branch_name == current.branch_name:
-            break
-    else:
-        record = stack.add_child(current.branch_name)
-    record = record.add_child(args.branch)
 
     branch = repo.lookup_branch(args.branch)
     if branch:
         raise GhitError(
             s.danger('Branch ') + s.emphasis(args.branch) + s.danger(' already exists.'),
         )
+
+    current = get_current_branch(repo)
+    parent = None
+    for record in stack.traverse(True):
+        if record.branch_name == current.branch_name:
+            parent = record
+            break
+    else:
+        parent = stack.add_child(current.branch_name)
+
     branch = repo.branches.local.create(name=args.branch, commit=repo.get(repo.head.target))
 
-    checkout(repo, record)
+    new_record = parent.add_child(args.branch)
+    checkout(repo, new_record)
 
     lines = []
     stack.dumps(lines)

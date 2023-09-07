@@ -13,7 +13,7 @@ def add_top_commands(parser: argparse.ArgumentParser):
 
     commands.add_parser(
         'init',
-        help='create `.ghit.stack` file with the current branch, and add it to `.gitignore`',
+        help='create `.ghit/stack` file with the current branch',
     ).set_defaults(func=top.init)
 
     commands.add_parser(

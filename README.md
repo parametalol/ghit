@@ -18,12 +18,15 @@ Features
   * adds `.ghit/.gitignore`
 * Stack manipulation: `ghit branch create <name>`:
   * create and switch to the new branch
-  * add new branch name to `.ghit/stack`
+  * add the branch name to `.ghit/stack`
 * Stack or branch publication with `ghit stack submit` or `ghit branch submit`:
   * pushes branch(es) upstream with no force, so may fail after rebase
   * creates or updates GitHub PR(s)
   * creates or updates dependencies comment(s)
-* Check that branches in a stack sit on the heads of their parents with `ghit stack check` and suggests how to rebase
+* Check stack with `ghit stack check`:
+  * branches in a stack sit on the heads of their parents
+  * suggests rebase commands
+  * suggests to delete local branches if there are merged or closed PRs
 
 Installation
 ------------

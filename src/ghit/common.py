@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pygit2 as git
@@ -21,7 +22,8 @@ GHIT_STACK_FILENAME = 'stack'
 
 
 def stack_filename(repo: git.Repository) -> Path:
-    return Path(repo.path).resolve().parent / GHIT_STACK_DIR / GHIT_STACK_FILENAME
+    env = os.getenv('GHIT_STACK')
+    return Path(env) if env else Path(repo.path).resolve().parent / GHIT_STACK_DIR / GHIT_STACK_FILENAME
 
 
 def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
