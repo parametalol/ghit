@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -6,7 +7,7 @@ import pygit2 as git
 from . import styling as s
 from . import terminal
 from .args import Args
-from .common import connect, stack_filename
+from .common import GHIT_STACK_DIR, connect, stack_filename
 from .error import GhitError
 from .gh import GH
 from .gh_formatting import format_info
@@ -193,16 +194,26 @@ def bottom(args: Args) -> None:
 
 
 def init(args: Args) -> None:
+    if args.stack or os.getenv('GHIT_STACK'):
+        raise GhitError
     repo = git.Repository(args.repository)
-    repopath = Path(repo.path).resolve().parent
+    repopath = Path(repo.workdir).resolve()
     filename = stack_filename(repo)
+    logging.debug('stack filename: %s', filename)
+    logging.debug('stack arg: %s', args.stack)
+
     stack = open_stack(Path(args.stack) if args.stack else filename)
     if stack:
         return
+    logging.debug('%s vs %s', filename, repopath)
+    if os.path.commonpath([filename, repopath]) == str(repopath):
+        dotghit = Path(repopath / GHIT_STACK_DIR)
+        logging.debug('creating dir %s', dotghit)
 
-    if os.path.commonpath([filename, repopath]) == repopath and not repo.path_is_ignored(filename):
-        with (repopath / '.gitignore').open('a') as gitignore:
-            gitignore.write(filename.name + '\n')
+        dotghit.mkdir(exist_ok=True)
+        if not repo.path_is_ignored(str(filename)):
+            with (dotghit / '.gitignore').open('w') as gitignore:
+                gitignore.write('*\n')
 
     with filename.open('w') as ghitstack:
         ghitstack.write(get_current_branch(repo).branch_name + '\n')

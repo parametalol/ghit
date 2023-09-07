@@ -16,12 +16,12 @@ class ConnectionsCache:
     _connections: tuple[git.Repository, Stack, GH] = None
 
 
-GHIT_STACK_FILENAME = '.ghit.stack'
+GHIT_STACK_DIR = '.ghit'
+GHIT_STACK_FILENAME = 'stack'
 
 
 def stack_filename(repo: git.Repository) -> Path:
-    Path(repo.path).resolve().parent / GHIT_STACK_FILENAME
-    return Path(repo.path).resolve().parent / GHIT_STACK_FILENAME
+    return Path(repo.path).resolve().parent / GHIT_STACK_DIR / GHIT_STACK_FILENAME
 
 
 def connect(args: Args) -> tuple[git.Repository, Stack, GH]:

@@ -1,6 +1,5 @@
 import argparse
 import logging
-import os
 
 from . import branch_commands as bcom
 from . import stack_commands as scom
@@ -61,7 +60,7 @@ def add_branch_commands(parser: argparse.ArgumentParser) -> None:
 def ghit(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--repository', default='.')
-    parser.add_argument('-s', '--stack', default=os.getenv('GHIT_STACK') or '.ghit.stack')
+    parser.add_argument('-s', '--stack')
     parser.add_argument('-o', '--offline', action='store_true')
     parser.add_argument('-g', '--debug', action='store_true')
     parser.add_argument('-v', '--verbose', action='store_true')
