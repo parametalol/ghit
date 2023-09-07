@@ -14,16 +14,16 @@ Features
 * Stack navigation (checkout):
   * `ghit up`, `ghit down`, `ghit top`, `ghit bottom`
 * Stack initialization with `ghit init`:
-  * creates `.ghit.stack` with the current branch as the main branch
-  * adds `.ghit.stack` to `.gitignore`
+  * creates `.ghit/stack` with the current branch as the main branch
+  * adds `.ghit/.gitignore`
 * Stack manipulation: `ghit branch create <name>`:
   * create and switch to the new branch
-  * add new branch name to `.ghit.stack`
+  * add new branch name to `.ghit/stack`
 * Stack or branch publication with `ghit stack submit` or `ghit branch submit`:
   * pushes branch(es) upstream with no force, so may fail after rebase
   * creates or updates GitHub PR(s)
   * creates or updates dependencies comment(s)
-* Check that branches in a stack sit on the heads of their parents with `ghit stack check`
+* Check that branches in a stack sit on the heads of their parents with `ghit stack check` and suggests how to rebase
 
 Installation
 ------------
@@ -34,21 +34,22 @@ python3 -m pip install ghit-smartptr
 
 Example Flow
 ------------
+
 ```console
 localhost:my-git-repo (main)$ ghit init
-localhost:my-git-repo (main)$ cat .ghit.stack 
+localhost:my-git-repo (main)$ cat .ghit/stack 
 main
-localhost:my-git-repo (main)$ git add .gitignore
-localhost:my-git-repo (main)$ git commit -m "add .ghit.stack to .gitignore"
 ```
+
 ```console
 localhost:my-git-repo (main)$ ghit branch create new-feature
 Checked-out new-feature.
 The branch doesn't have an upstream.
-localhost:my-git-repo (new-feature)$ cat .ghit.stack 
+localhost:my-git-repo (new-feature)$ cat .ghit/stack 
 main
 .new-feature
 ```
+
 ```console
 localhost:my-git-repo (new-feature)$ git add .
 localhost:my-git-repo (new-feature)$ git commit
@@ -63,6 +64,7 @@ localhost:my-git-repo (new-feature)$ ghit ls
   main
 ⯈ └─ new-feature #73 (OPEN)✓ new-feature
 ```
+
 ```console
 localhost:my-git-repo (new-feature)$ ghit top
 Checked-out main.
