@@ -12,11 +12,16 @@ on:
   release:
     types: [published]
 
+
 jobs:
   deploy:
 
     runs-on: ubuntu-latest
+    environment: release
 
+    permissions:
+      # IMPORTANT: this permission is mandatory for trusted publishing
+      id-token: write
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python
@@ -26,14 +31,16 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install build flake8 pygit2 requests
-    - name: Lint and test
+        pip install build ruff pygit2 requests
+    - name: Check with ruff
       run: |
-        flake8 src/ghit --count --show-source --statistics --max-line-length=120
+        ruff check src
+    - name: Unit tests
+      run: |
         python -m unittest discover -s src -v
     - name: Build package
       run: python -m build
-    - name: Publish distribution 📦 to PyPI
+
+    - name: Publish package distributions to PyPI
+      # This workflow is a configured trusted publisher on PyPI.
       uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.PYPI_API_TOKEN }}
