@@ -29,7 +29,7 @@ jobs:
         pip install build flake8 pygit2 requests
     - name: Lint and test
       run: |
-        flake8 src/ghit --count --show-source --statistics
+        flake8 src/ghit --count --show-source --statistics --max-line-length=120
         python -m unittest discover -s src -v
     - name: Build package
       run: python -m build
