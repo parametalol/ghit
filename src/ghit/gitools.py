@@ -31,6 +31,8 @@ def get_current_branch(repo: git.Repository) -> git.Branch:
 
 
 def last_commits(repo: git.Repository, target: git.Oid, n: int = 1) -> Iterator[git.Commit]:
+    if n == 0:
+        return
     for i, commit in enumerate(repo.walk(target), start=1):
         yield commit
         if i >= n:

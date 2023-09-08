@@ -38,7 +38,7 @@ def check(args: Args) -> None:
 
     insync = True
     for record in stack.traverse(False):
-        if has_finished_pr(repo, gh, record):
+        if gh and has_finished_pr(repo, gh, record):
             continue
         parent = record.get_parent()
         parent_ref = repo.references.get(f'refs/heads/{parent.branch_name}')
@@ -46,9 +46,9 @@ def check(args: Args) -> None:
         if not ref:
             continue
         a, b = repo.ahead_behind(parent_ref.target, ref.target)
-        if a or b:
-            insync = False
-
+        if not a:
+            continue
+        insync = False
         terminal.stdout(
             s.warning('🗶'),
             s.emphasis(record.get_parent().branch_name),
@@ -60,15 +60,16 @@ def check(args: Args) -> None:
         for commit in last_commits(repo, parent_ref.target, a):
             terminal.stdout(s.inactive(f'\t[{commit.short_id}] {commit.message.splitlines()[0]}'))
 
-        terminal.stdout(
-            ' ',
-            s.warning('while'),
-            s.emphasis(record.branch_name),
-            s.warning((f'has {b} commits' if b != 1 else f'has {b} commit') + ' on top of'),
-            s.emphasis(record.get_parent().branch_name) + s.warning(':'),
-        )
-        for commit in last_commits(repo, ref.target, b):
-            terminal.stdout(s.inactive(f'\t[{commit.short_id}] {commit.message.splitlines()[0]}'))
+        if b:
+            terminal.stdout(
+                ' ',
+                s.warning('while'),
+                s.emphasis(record.branch_name),
+                s.warning((f'has {b} commits' if b != 1 else f'has {b} commit') + ' on top of'),
+                s.emphasis(record.get_parent().branch_name) + s.warning(':'),
+            )
+            for commit in last_commits(repo, ref.target, b):
+                terminal.stdout(s.inactive(f'\t[{commit.short_id}] {commit.message.splitlines()[0]}'))
 
         terminal.stdout(
             ' ',
