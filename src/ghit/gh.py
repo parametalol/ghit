@@ -158,7 +158,7 @@ class GH:
                         line += ' 👈'
                     md.append(line)
             else:
-                md.append('  ' * record.depth + f'* {record.branch_name}')
+                md.append('  ' * record.depth + f'* [{record.branch_name}](../tree/{record.branch_name})')
         return '\n'.join(md)
 
     def _search_stack_prs(self) -> dict[str, list[ghgql.PR]]:
