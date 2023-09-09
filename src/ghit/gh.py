@@ -209,7 +209,7 @@ class GH:
         pr.base = base
 
     def create_pr(self, base: str, branch_name: str, title: str = '', draft: bool = False) -> ghgql.PR:
-        logging.debug('creating PR wiht base %s and head %s', base, branch_name)
+        logging.debug('creating PR with base %s and head %s', base, branch_name)
         base_branch = self.repo.lookup_branch(base)
         if not base_branch.upstream:
             raise GhitError(f'Base branch {base} has no upstream.')
