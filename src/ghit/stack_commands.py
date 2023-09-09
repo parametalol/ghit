@@ -4,7 +4,7 @@ from . import gh, terminal
 from . import gh_formatting as ghf
 from . import styling as s
 from .args import Args
-from .common import connect, push_and_pr
+from .common import connect, push_and_pr, rewrite_stack
 from .error import GhitError
 from .gitools import last_commits
 from .stack import Stack
@@ -94,3 +94,20 @@ def stack_submit(args: Args) -> None:
 
     for record in stack.traverse(False):
         push_and_pr(repo, gh, origin, record)
+
+
+def cleanup(args: Args) -> None:
+    repo, stack, gh = connect(args)
+    if repo.is_empty:
+        return
+
+    for record in stack.traverse(False):
+        keep = repo.lookup_branch(record.branch_name) is not None
+        if not args.offline and gh:
+            keep = keep and all(pr.state != 'MERGED' for pr in gh.get_prs(record.branch_name))
+
+        if not keep:
+            record.disable()
+            terminal.stdout(s.warning('Disabled'), s.emphasis(record.branch_name)+s.warning('.'))
+
+    rewrite_stack(args.stack, repo, stack)

@@ -57,7 +57,7 @@ def ls(args: Args) -> None:
     parent_prefix: list[str] = []
 
     for record in stack.traverse():
-        parent_prefix = parent_prefix[: max(record.depth - 2, 0)]
+        parent_prefix = parent_prefix[: max(record.depth - 1, 0)]
 
         _print_line(repo, record.branch_name == checked_out, parent_prefix, record)
 

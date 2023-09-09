@@ -108,3 +108,7 @@ def push_and_pr(
             sep='',
         )
         terminal.stdout(s.colorful(pr.url))
+
+def rewrite_stack(args_stack: str, repo: git.Repository, stack: Stack):
+    with (Path(args_stack) if args_stack else stack_filename(repo)).open('w') as ghit_stack:
+        ghit_stack.write('\n'.join(stack.dumps()) + '\n')

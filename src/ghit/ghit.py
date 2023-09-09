@@ -40,6 +40,9 @@ def add_stack_commands(parser: argparse.ArgumentParser):
         'submit',
         help='push stack branches upstream and update PRs',
     ).set_defaults(func=scom.stack_submit)
+    parser_stack_sub.add_parser(
+        'cleanup', help='removes unexisting branches from the stack, or the ones with merged PRs'
+    ).set_defaults(func=scom.cleanup)
 
 
 def add_branch_commands(parser: argparse.ArgumentParser) -> None:

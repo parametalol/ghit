@@ -1,11 +1,9 @@
-from pathlib import Path
-
 from . import styling as s
 from .common import (
     Args,
     connect,
     push_and_pr,
-    stack_filename,
+    rewrite_stack,
 )
 from .error import GhitError
 from .gitools import checkout, get_current_branch
@@ -53,7 +51,4 @@ def create(args: Args) -> None:
     new_record = parent.add_child(args.branch)
     checkout(repo, new_record)
 
-    lines = []
-    stack.dumps(lines)
-    with (Path(args.stack) if args.stack else stack_filename(repo)).open('w') as ghit_stack:
-        ghit_stack.write('\n'.join(lines) + '\n')
+    rewrite_stack(args.stack, repo, stack)
