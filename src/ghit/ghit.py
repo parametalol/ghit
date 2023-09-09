@@ -59,6 +59,10 @@ def add_branch_commands(parser: argparse.ArgumentParser) -> None:
     upr.add_argument('-d', '--draft', help='create draft PR', action='store_true')
     upr.set_defaults(func=bcom.branch_submit)
 
+    parser_branch_sub.add_parser('check', help='check the state of the branch and possible PRs').set_defaults(
+        func=bcom.check
+    )
+
 
 def ghit(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()

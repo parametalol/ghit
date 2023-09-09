@@ -1,12 +1,14 @@
 from . import styling as s
 from .common import (
     Args,
+    check_record,
     connect,
     push_and_pr,
     rewrite_stack,
 )
 from .error import GhitError
 from .gitools import checkout, get_current_branch
+from .stack import Stack
 
 
 def branch_submit(args: Args) -> None:
@@ -52,3 +54,9 @@ def create(args: Args) -> None:
     checkout(repo, new_record)
 
     rewrite_stack(args.stack, repo, stack)
+
+
+def check(args: Args) -> None:
+    repo, stack, gh = connect(args)
+    if not check_record(repo, gh, stack):
+        raise GhitError
