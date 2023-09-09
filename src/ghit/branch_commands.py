@@ -1,6 +1,7 @@
 from . import styling as s
 from .common import (
     Args,
+    check_record,
     connect,
     push_and_pr,
     rewrite_stack,
@@ -52,3 +53,9 @@ def create(args: Args) -> None:
     checkout(repo, new_record)
 
     rewrite_stack(args.stack, repo, stack)
+
+
+def check(args: Args) -> None:
+    repo, stack, gh = connect(args)
+    if not check_record(repo, gh, stack):
+        raise GhitError
