@@ -216,4 +216,5 @@ def init(args: Args) -> None:
                 gitignore.write('*\n')
 
     with filename.open('w') as ghitstack:
-        ghitstack.write(get_current_branch(repo).branch_name + '\n')
+        branch_name = repo.config['init.defaultBranch'] if repo.is_empty else get_current_branch(repo).branch_name
+        ghitstack.write(branch_name + '\n')
