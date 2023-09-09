@@ -8,7 +8,6 @@ from .common import (
 )
 from .error import GhitError
 from .gitools import checkout, get_current_branch
-from .stack import Stack
 
 
 def branch_submit(args: Args) -> None:
