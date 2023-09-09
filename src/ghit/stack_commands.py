@@ -86,7 +86,7 @@ def check(args: Args) -> None:
 
 def stack_submit(args: Args) -> None:
     repo, stack, gh = connect(args)
-    if repo.is_empty:
+    if repo.is_empty or args.offline or not gh:
         return
     origin = repo.remotes['origin']
     if not origin:

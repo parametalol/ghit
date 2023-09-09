@@ -88,13 +88,15 @@ def push_and_pr(
         update_upstream(repo, origin, branch)
 
     prs = gh.get_prs(record.branch_name)
-    if prs and not all(p.closed for p in prs):
+    if prs and not all(p.closed or p.merged for p in prs):
         for pr in prs:
             if gh.comment(pr):
                 terminal.stdout(f'Commented {pr_number_with_style(pr)}.')
             else:
                 terminal.stdout(f'Updated comment in {pr_number_with_style(pr)}.')
 
+            if pr.closed or pr.merged:
+                continue
             gh.update_pr(record, pr)
             terminal.stdout(f'Set PR {pr_number_with_style(pr)} base branch to {s.emphasis(pr.base)}.')
             terminal.stdout(s.colorful(pr.url))
