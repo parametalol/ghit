@@ -6,6 +6,7 @@ import pygit2 as git
 
 from . import styling as s
 from . import terminal
+from .__init__ import __version__
 from .args import Args
 from .common import GHIT_STACK_DIR, connect, stack_filename
 from .error import GhitError
@@ -218,3 +219,6 @@ def init(args: Args) -> None:
     with filename.open('w') as ghitstack:
         branch_name = repo.config['init.defaultBranch'] if repo.is_empty else get_current_branch(repo).branch_name
         ghitstack.write(branch_name + '\n')
+
+def version(_: Args) -> None:
+    terminal.stdout(__version__)
