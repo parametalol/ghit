@@ -12,7 +12,7 @@ def check(args: Args) -> None:
 
     insync = True
     for record in stack.traverse(False):
-        insync = insync and check_record(args, gh, record)
+        insync = insync and check_record(repo, gh, record)
 
     if not insync:
         raise GhitError(s.warning('The stack is not in shape.'))
