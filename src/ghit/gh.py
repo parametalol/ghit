@@ -177,7 +177,7 @@ class GH:
         logging.debug('Query done.')
         return prs
 
-    def comment(self, pr: ghgql.PR) -> bool:
+    def comment(self, pr: ghgql.PR) -> bool | None:
         logging.debug('commenting pr #%s', pr.number)
         comment = self._find_stack_comment(pr)
         md = self._make_stack_comment(pr)
@@ -197,16 +197,17 @@ class GH:
         )
         return True
 
-    def update_pr(self, record: Stack, pr: ghgql.PR) -> None:
+    def update_pr(self, record: Stack, pr: ghgql.PR) -> bool:
         base = record.get_parent().branch_name
         if pr.base == base:
-            return
+            return False
         logging.debug('updating PR base from %s to %s', pr.base, base)
         ghgql.graphql(
             self.token,
             ghgql.make_update_pr_base_query(gql.input(pullRequestId=f'"{pr.id}"', baseRefName=f'"{base}"')),
         )
         pr.base = base
+        return True
 
     def create_pr(self, base: str, branch_name: str, title: str = '', draft: bool = False) -> ghgql.PR:
         logging.debug('creating PR with base %s and head %s', base, branch_name)

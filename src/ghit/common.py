@@ -94,15 +94,23 @@ def push_and_pr(
         logging.debug('found pr: %d closed=%s merged=%s', pr.number, pr.closed, pr.merged)
     if prs:
         for pr in prs:
-            if gh.comment(pr):
+            touched = False
+            commented = gh.comment(pr)
+            if commented:
                 terminal.stdout(f'Commented {pr_number_with_style(pr)}.')
-            else:
+                touched = True
+            elif commented is not None:
                 terminal.stdout(f'Updated comment in {pr_number_with_style(pr)}.')
+                touched = True
+
             if pr.closed or pr.merged:
                 continue
-            gh.update_pr(record, pr)
-            terminal.stdout(f'Set PR {pr_number_with_style(pr)} base branch to {s.emphasis(pr.base)}.')
-            terminal.stdout(s.colorful(pr.url))
+            if gh.update_pr(record, pr):
+                terminal.stdout(f'Set PR {pr_number_with_style(pr)} base branch to {s.emphasis(pr.base)}.')
+                touched = True
+
+            if touched:
+                terminal.stdout(s.colorful(pr.url))
 
     else:
         pr = gh.create_pr(record.get_parent().branch_name, record.branch_name, title, draft)
