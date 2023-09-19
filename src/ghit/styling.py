@@ -42,6 +42,10 @@ def normal(m: str) -> str:
     return m
 
 
+def url(title: str, link: str) -> str:
+    return f'{ESC}]8;;{link}{ESC}\\{title}{ESC}]8;;{ESC}\\'
+
+
 def deleted(m: str) -> str:
     return with_style('strikethrough', m)
 

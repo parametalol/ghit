@@ -28,7 +28,7 @@ def _pr_state_style(pr: PR) -> Callable[[str], str]:
 
 def pr_number_with_style(pr: PR) -> str:
     number = s.with_style('dim', _pr_state_style(pr)(f'#{pr.number} ({pr.state})'))
-    return ('🔒' if pr.locked else '') + number
+    return ('🔒' if pr.locked else '') + s.url(number, pr.url)
 
 
 def pr_title_with_style(pr: PR) -> str:
