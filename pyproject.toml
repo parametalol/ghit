@@ -1,19 +1,34 @@
 [project]
 name = 'ghit-smartptr'
+description = 'ghit'
 readme = 'README.md'
 requires-python = '>=3.9,<4.0'
 dynamic = ['version']
-classifiers = ['Programming Language :: Python :: 3', 'License :: OSI Approved :: MIT License', 'Operating System :: OS Independent']
-authors = [{name='Michaël Petrov', email='smartptr@gmail.com'}]
+classifiers = [
+    'Programming Language :: Python :: 3',
+    'License :: OSI Approved :: MIT License',
+    'Operating System :: OS Independent'
+]
+authors = [
+    { name='Michaël Petrov', email='smartptr@gmail.com' },
+]
 dependencies = ['pygit2', 'requests']
 optional-dependencies = {testing=['pygit2', 'requests', 'pytest']}
+license = { file = "LICENSE" }
 
-[tool.setuptools.dynamic]
-version = {attr = 'ghit.__version__'}
+[project.urls]
+Homepage = 'https://github.com/0x656b694d/ghit'
+Issues = 'https://github.com/0x656b694d/ghit/issues'
+
+[tool.hatch]
+version = {attr = 'ghit.__version__', path = 'src/ghit/__init__.py'}
+
+[tool.hatch.build.targets.wheel]
+packages = ['src/ghit']
 
 [build-system]
-requires = ['setuptools>=61.0.0', 'wheel']
-build-backend = 'setuptools.build_meta'
+requires = ['hatchling']
+build-backend = 'hatchling.build'
 
 [tool.ruff]
 select = ['E', 'F', 'W', 'I', 'YTT', 'FA', 'ISC', 'ICN', 'G', 'C90', 'N', 'UP', 'S', 'B', 'C4', 'DTZ', 'DJ', 'PIE', 'T20', 'PT', 'Q', 'RSE', 'RET', 'SIM', 'TID', 'TCH', 'INT', 'PTH', 'PL']
@@ -33,4 +48,3 @@ inline-quotes = 'single'
 line-length = 120
 target-version = ['py39']
 skip-string-normalization = true
-
