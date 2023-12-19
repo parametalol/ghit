@@ -2,10 +2,14 @@
 name = 'ghit-smartptr'
 readme = 'README.md'
 requires-python = '>=3.9,<4.0'
-dynamic = ["version"]
+dynamic = ['version']
+classifiers = ['Programming Language :: Python :: 3', 'License :: OSI Approved :: MIT License', 'Operating System :: OS Independent']
+authors = [{name='Michaël Petrov', email='smartptr@gmail.com'}]
+dependencies = ['pygit2', 'requests']
+optional-dependencies = {testing=['pygit2', 'requests', 'pytest']}
 
 [tool.setuptools.dynamic]
-version = {attr = "ghit.__version__"}
+version = {attr = 'ghit.__version__'}
 
 [build-system]
 requires = ['setuptools>=61.0.0', 'wheel']
