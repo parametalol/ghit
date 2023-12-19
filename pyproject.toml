@@ -48,3 +48,6 @@ inline-quotes = 'single'
 line-length = 120
 target-version = ['py39']
 skip-string-normalization = true
+
+[project.scripts]
+ghit = 'ghit.__main__:main'
