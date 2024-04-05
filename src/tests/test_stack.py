@@ -57,12 +57,12 @@ def test_disabled():
 
     child = parse_line('..a2', parents)
     assert child.branch_name == 'a2'
-    assert child.depth == 2
+    assert child.depth == 2  # noqa: PLR2004
     assert child.get_parent().branch_name == 'main'
 
     child = parse_line('..a21', parents)
     assert child.branch_name == 'a21'
-    assert child.depth == 2
+    assert child.depth == 2  # noqa: PLR2004
     assert child.get_parent().branch_name == 'main'
 
     child = parse_line('.b1', parents)

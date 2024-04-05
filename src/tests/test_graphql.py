@@ -56,13 +56,13 @@ def test_func():
         obj('edges', 'cursor', obj('node', *['1', '2'])),
     )
 
-    assert 'func(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } ' + 'edges{ cursor node{ 1 2 } } }' == f
+    assert f == 'func(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } ' + 'edges{ cursor node{ 1 2 } } }'
 
 
 def test_paged():
-    assert 'object(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } ' + 'edges{ cursor node{ c d } } }' == paged(
+    assert paged(
         'object', {'a': 1, 'b': '"word"'}, 'c', 'd'
-    )
+    ) == 'object(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } ' + 'edges{ cursor node{ c d } } }'
 
 
 def test_cursor_or_null():
