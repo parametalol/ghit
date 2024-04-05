@@ -251,6 +251,8 @@ def init_gh(repo: git.Repository, stack: Stack, offline: bool) -> GH | None:
     gh = GH(repo, stack) if not offline and is_gh(repo) else None
     if gh:
         logging.debug('found gh repository %s', gh.repository)
+    elif offline:
+        logging.debug('working offline')
     else:
         logging.debug('gh not found')
     return gh

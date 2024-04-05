@@ -403,7 +403,6 @@ def graphql(token: str, query: str) -> any:
         headers={
             'Authorization': f'Bearer {token}',
             'Accept': 'application/vnd.github.v3+json',
-            'X-GitHub-Api-Version': '2022-11-28',
         },
         json={'query': query},
         timeout=30,
