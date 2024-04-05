@@ -76,17 +76,12 @@ def test_disabled():
     assert child.get_parent() is None
 
 def test_bad_indent():
-    stack = Stack()
-    parents = [stack]
-    child = parse_line('main', parents)
-    assert child.get_parent() is None
-    assert stack._children['main'].branch_name == 'main'
-    assert child.branch_name == 'main'
-    assert child.depth == 0
-
+    text = ['main', '..a2']
     with pytest.raises(GhitError):
-        parse_line('..a1', parents)
+        parse(text)
 
+    text = ['#.disabled', 'main']
+    parse(text)
 
 def test_parse():
     text = ['main', '.b1', '..b2']

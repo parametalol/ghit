@@ -111,7 +111,7 @@ def parse_line(line: str, parents: list[Stack]) -> Stack:
             break
         parents.pop()
 
-    if depth - parent.depth > 1:
+    if enabled and depth - parent.depth > 1:
         raise GhitError('bad indent')
 
     logging.debug('parsed: %s%s%s parent: %s', '' if enabled else '#', '.'*depth, branch_name, parent.branch_name)
