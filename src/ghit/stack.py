@@ -94,10 +94,10 @@ class Stack:
 
 
 def parse_line(line: str, parents: list[Stack]) -> Stack:
+    line = line.strip(' \t\r\n')
     enabled = not line.startswith('#')
-
-    stack_line = line.lstrip('# ')
-    branch_name = stack_line.lstrip('. ')
+    stack_line = line.lstrip('#').lstrip()
+    branch_name = stack_line.lstrip('. \t')
     if not branch_name:
         raise GhitError('no branch name')
 
