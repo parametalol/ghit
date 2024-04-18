@@ -68,9 +68,9 @@ def add_branch_commands(parser: argparse.ArgumentParser) -> None:
 
 def ghit(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument('-r', '--repository', default='.')
-    parser.add_argument('-s', '--stack')
-    parser.add_argument('-o', '--offline', action='store_true')
+    parser.add_argument('-r', '--repository', default='.', help='the git repository path (default .)')
+    parser.add_argument('-s', '--stack', help='the stack filename (default .ghit/stack)')
+    parser.add_argument('-o', '--offline', action='store_true', help='do not call GitHub')
     parser.add_argument('-g', '--debug', action='store_true')
     parser.add_argument('-v', '--verbose', action='store_true')
 
@@ -79,6 +79,10 @@ def ghit(argv: list[str]) -> int:
     add_branch_commands(commands.add_parser('branch', aliases=['b', 'br']))
 
     args = parser.parse_args(args=argv)
+    if 'func' not in args:
+        parser.print_usage()
+        terminal.stderr('Please provide the full command, with necessary subcommands.', args)
+        return 1
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
         try:
