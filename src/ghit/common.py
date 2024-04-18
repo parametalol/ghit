@@ -7,6 +7,7 @@ import pygit2 as git
 from . import gh_formatting as ghf
 from . import styling as s
 from . import terminal
+from . import gh_graphql as ghgql
 from .args import Args
 from .error import GhitError
 from .gh import GH, init_gh
@@ -83,7 +84,7 @@ def push_and_pr(
     record: Stack,
     title: str = '',
     draft: bool = False,
-) -> None:
+) -> tuple[list[ghgql.PR], bool]:
     branch = repo.branches[record.branch_name]
     if not branch.upstream:
         push_branch(origin, branch)
@@ -113,6 +114,9 @@ def push_and_pr(
             '.',
             sep='',
         )
+        prs.append(pr)
+        return prs, True
+    return prs, False
 
 
 def rewrite_stack(args_stack: str, repo: git.Repository, stack: Stack):
