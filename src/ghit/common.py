@@ -5,9 +5,9 @@ from pathlib import Path
 import pygit2 as git
 
 from . import gh_formatting as ghf
+from . import gh_graphql as ghgql
 from . import styling as s
 from . import terminal
-from . import gh_graphql as ghgql
 from .args import Args
 from .error import GhitError
 from .gh import GH, init_gh
