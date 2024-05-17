@@ -1,8 +1,6 @@
 `ghit` Command Line Utility
 ===========================
 
-:warning: Work in progress.
-
 Features
 --------
 
