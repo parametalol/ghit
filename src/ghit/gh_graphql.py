@@ -38,6 +38,7 @@ GQL_PR = gql.fields(
     'id',
     'title',
     GQL_AUTHOR,
+    'body',
     'url',
     'baseRefName',
     'headRefName',
@@ -274,6 +275,7 @@ class PR:
     id: str
     author: Author
     title: str
+    body: str
     url: str
     state: str
     closed: bool
@@ -377,6 +379,7 @@ def make_pr(edge: any) -> PR:
         id=node['id'],
         author=_make_author(node['author']),
         title=node['title'],
+        body=node['body'],
         url=node['url'],
         draft=node['isDraft'],
         locked=node['locked'],

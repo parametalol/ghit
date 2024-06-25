@@ -22,8 +22,9 @@ GH_SCHEME = 'git@github.com:'
 
 GH_TEMPLATES = ['.github', 'docs', '']
 
+COMMENT_BEGIN = '<!-- GHIT dependencies begin -->'
 COMMENT_FIRST_LINE = 'Current dependencies on/for this PR:'
-
+COMMENT_END = '<!-- GHIT dependencies end -->'
 
 def get_gh_owner_repository(url: ParseResult) -> (str, str):
     _, owner, repository = url.path.split('/', 2)
@@ -63,6 +64,23 @@ def is_gh(repo: git.Repository) -> bool:
     url = get_gh_url(repo)
     return url.netloc.find('github.com') >= 0
 
+def _find_stack_comment(body: str) -> tuple[int, int] | None:
+    start_index = body.find(COMMENT_BEGIN)
+    if start_index == -1:
+        return None
+    end_index = body.find(COMMENT_END, start_index)
+    if end_index == -1:
+        return None
+    end_index += len(COMMENT_END)
+    return (start_index, end_index)
+
+def _patch_body(body: str, comment: str) -> str | None:
+    range = _find_stack_comment(body)
+    if range:
+        if body[range[0]:range[1]] == comment:
+            return None
+        return body[:range[0]] + comment + body[range[1]:]
+    return body + '\n' + comment
 
 class GH:
     def __init__(self, repo: git.Repository, stack: Stack) -> None:
@@ -144,24 +162,19 @@ class GH:
             stats[pr] = GH.PRStats(nr, cr, approved, sync)
         return stats
 
-    def _find_stack_comment(self, pr: ghgql.PR) -> ghgql.Comment | None:
-        for comment in pr.comments.data:
-            if comment.body.startswith(COMMENT_FIRST_LINE):
-                return comment
-        return None
-
-    def _make_stack_comment(self, remote_pr: ghgql.PR) -> str:
-        md = [COMMENT_FIRST_LINE, '']
+    def _make_stack_comment(self, current_pr_number: int) -> str:
+        md = [COMMENT_BEGIN, COMMENT_FIRST_LINE, '']
         for record in self.stack.traverse():
             prs = self.get_prs(record.branch_name)
             if prs:
                 for pr in prs:
                     line = '  ' * record.depth + f'* **PR #{pr.number}**'
-                    if pr.number == remote_pr.number:
+                    if pr.number == current_pr_number:
                         line += ' 👈'
                     md.append(line)
             else:
                 md.append('  ' * record.depth + f'* [{record.branch_name}](../tree/{record.branch_name})')
+        md.append(COMMENT_END)
         return '\n'.join(md)
 
     def _search_stack_prs(self) -> dict[str, list[ghgql.PR]]:
@@ -182,21 +195,16 @@ class GH:
 
     def comment(self, pr: ghgql.PR) -> bool | None:
         logging.debug('commenting pr #%s', pr.number)
-        comment = self._find_stack_comment(pr)
-        md = self._make_stack_comment(pr)
-        if comment and comment.body == md:
+        logging.debug('current pr body: %s', pr.body)
+        comment_md = self._make_stack_comment(pr.number)
+        body = _patch_body(pr.body, comment_md)
+        if not body:
             logging.debug('comment is up to date')
             return None
-        md = json.dumps(md, ensure_ascii=False)
-        if comment:
-            ghgql.graphql(
-                self.token,
-                ghgql.make_update_comment_query(gql.input(id=f'"{comment.id}"', body=md)),
-            )
-            return False
+        body = json.dumps(body, ensure_ascii=False)
         ghgql.graphql(
             self.token,
-            ghgql.make_add_comment_query(gql.input(subjectId=f'"{pr.id}"', body=md)),
+            ghgql.make_update_pr_base_query(gql.input(pullRequestId=f'"{pr.id}"', body=body)),
         )
         return True
 
