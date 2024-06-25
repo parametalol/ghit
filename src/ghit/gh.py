@@ -193,18 +193,17 @@ class GH:
         logging.debug('Query done.')
         return prs
 
-    def comment(self, pr: ghgql.PR) -> bool | None:
-        logging.debug('commenting pr #%s', pr.number)
-        logging.debug('current pr body: %s', pr.body)
+    def update_dependencies(self, pr: ghgql.PR) -> bool:
+        logging.debug('adding dependencies to pr #%s', pr.number)
         comment_md = self._make_stack_comment(pr.number)
         body = _patch_body(pr.body, comment_md)
         if not body:
-            logging.debug('comment is up to date')
-            return None
+            logging.debug('dependencies are up to date')
+            return False
         body = json.dumps(body, ensure_ascii=False)
         ghgql.graphql(
             self.token,
-            ghgql.make_update_pr_base_query(gql.input(pullRequestId=f'"{pr.id}"', body=body)),
+            ghgql.make_update_pr_query(gql.input(pullRequestId=f'"{pr.id}"', body=body)),
         )
         return True
 
@@ -215,7 +214,7 @@ class GH:
         logging.debug('updating PR base from %s to %s', pr.base, base)
         ghgql.graphql(
             self.token,
-            ghgql.make_update_pr_base_query(gql.input(pullRequestId=f'"{pr.id}"', baseRefName=f'"{base}"')),
+            ghgql.make_update_pr_query(gql.input(pullRequestId=f'"{pr.id}"', baseRefName=f'"{base}"')),
         )
         pr.base = base
         return True
@@ -254,7 +253,7 @@ class GH:
             self.__prs[branch_name].append(pr)
         else:
             self.__prs.update({branch_name: [pr]})
-        self.comment(pr)
+        self.update_dependencies(pr)
         return pr
 
 

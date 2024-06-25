@@ -34,10 +34,10 @@ def stack_submit(args: Args) -> None:
         needs_update = needs_update or pr_created
 
     if needs_update and len(prs) > 1:
-        # Update the ghit comments in all PRs except the last one, which doesn't
+        # Update the deps section in all PRs except the last one, which doesn't
         # need to be updated, if a new PR has been created.
         for pr in prs[:-1]:
-            gh.comment(pr)
+            gh.update_dependencies(pr)
 
 def cleanup(args: Args) -> None:
     repo, stack, gh = connect(args)

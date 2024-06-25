@@ -199,7 +199,7 @@ def make_create_pr_query(pr_input: any) -> str:
     )
 
 
-def make_update_pr_base_query(pr_input: any) -> str:
+def make_update_pr_query(pr_input: any) -> str:
     return gql.query(
         'mutation update_pr',
         gql.func(

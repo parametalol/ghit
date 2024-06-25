@@ -95,11 +95,8 @@ def push_and_pr(
         logging.debug('found pr: %d closed=%s merged=%s', pr.number, pr.closed, pr.merged)
     if prs:
         for pr in prs:
-            commented = gh.comment(pr)
-            if commented:
-                terminal.stdout(f'Commented {pr_number_with_style(pr)}.')
-            elif commented is not None:
-                terminal.stdout(f'Updated comment in {pr_number_with_style(pr)}.')
+            if gh.update_dependencies(pr):
+                terminal.stdout(f'Updated dependencies in {pr_number_with_style(pr)}.')
 
             if pr.closed or pr.merged:
                 continue
