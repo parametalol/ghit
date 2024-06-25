@@ -76,7 +76,10 @@ class GH:
             filename = Path(repo.path) / t / 'pull_request_template.md'
             if filename.exists():
                 self.template = filename.open().read()
+                logging.debug('found PR template: %s', filename)
                 break
+        else:
+            logging.debug('no PR templates found')
         self.__prs = None
 
     def get_prs(self, branch_name: str) -> list[ghgql.PR]:
