@@ -73,7 +73,7 @@ class GH:
         self.token = get_gh_token(self.url)
         self.template: str | None = None
         for t in GH_TEMPLATES:
-            filename = Path(repo.path) / t / 'pull_request_template.md'
+            filename = Path(repo.workdir) / t / 'pull_request_template.md'
             if filename.exists():
                 self.template = filename.open().read()
                 logging.debug('found PR template: %s', filename)
