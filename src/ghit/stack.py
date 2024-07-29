@@ -99,7 +99,7 @@ def parse_line(line: str, parents: list[Stack]) -> Stack:
     stack_line = line.lstrip('#').lstrip()
     branch_name = stack_line.lstrip('. \t')
     if not branch_name:
-        raise GhitError('no branch name')
+        return None
 
     depth = 0
     while stack_line[depth] == '.':

@@ -45,6 +45,8 @@ def test_parse_line():
     assert child.depth == 0
     assert child.get_parent() is None
 
+    child = parse_line('', parents)
+    assert child is None
 
 def test_disabled():
     stack = Stack()

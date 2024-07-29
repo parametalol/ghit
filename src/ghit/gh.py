@@ -26,7 +26,7 @@ COMMENT_BEGIN = '<!-- GHIT dependencies begin -->'
 COMMENT_FIRST_LINE = 'Current dependencies on/for this PR:'
 COMMENT_END = '<!-- GHIT dependencies end -->'
 
-def get_gh_owner_repository(url: ParseResult) -> (str, str):
+def get_gh_owner_repository(url: ParseResult) -> tuple[str, str]:
     _, owner, repository = url.path.split('/', 2)
     return owner, repository.removesuffix('.git')
 
