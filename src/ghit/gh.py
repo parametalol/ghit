@@ -32,7 +32,9 @@ def get_gh_owner_repository(url: ParseResult) -> tuple[str, str]:
 
 
 def get_gh_url(repo: git.Repository) -> ParseResult:
-    url: str = repo.remotes['origin'].url
+    url: str | None = repo.remotes['origin'].url
+    if url is None:
+        raise GhitError('empty remote origin URL')
     if url.startswith(GH_SCHEME):
         insteadof = repo.config['url.git@github.com:.insteadof']
         url = insteadof + url.removeprefix(GH_SCHEME)
@@ -106,16 +108,19 @@ class GH:
         return self.__prs.get(branch_name, list[ghgql.PR]())
 
     def is_sync(self, remote_pr: ghgql.PR, record: Stack) -> bool:
-        if not record.get_parent():
+        if not record.get_parent() or record.branch_name is None:
             return True
         for pr in self.get_prs(record.branch_name):
-            if pr.number == remote_pr.number and remote_pr.base != record.get_parent().branch_name:
-                logging.debug("remote PR base doesn't match: %s vs %s", remote_pr.base, record.get_parent().branch_name)
+            parent = record.get_parent()
+            if parent is None:
+                continue
+            if pr.number == remote_pr.number and remote_pr.base != parent.branch_name:
+                logging.debug("remote PR base doesn't match: %s vs %s", remote_pr.base, parent.branch_name)
                 return False
         return True
 
     @classmethod
-    def unresolved(cls: GH, pr: ghgql.PR) -> dict[ghgql.Author, list[ghgql.Comment]]:
+    def unresolved(cls, pr: ghgql.PR) -> dict[ghgql.Author, list[ghgql.Comment]]:
         result = [thread for thread in pr.threads.data if not thread.resolved]
 
         def author_reacted(thread: ghgql.ReviewThread) -> bool:
@@ -128,7 +133,7 @@ class GH:
             return False
 
         def author_commented(thread: ghgql.ReviewThread) -> bool:
-            return thread.comments.data and thread.comments.data[-1].author.login == pr.author.login
+            return len(thread.comments.data) > 0 and thread.comments.data[-1].author.login == pr.author.login
 
         comments: dict[ghgql.Author, list[ghgql.Comment]] = {}
         for thread in filter(
@@ -151,6 +156,8 @@ class GH:
 
     def pr_stats(self, record: Stack) -> dict[ghgql.PR, PRStats]:
         stats: dict[ghgql.PR, GH.PRStats] = {}
+        if record.branch_name is None:
+            return stats
         for pr in self.get_prs(record.branch_name):
             authors: dict[str, ghgql.Review] = {}
             for r in pr.reviews.data:
@@ -165,6 +172,8 @@ class GH:
     def _make_stack_comment(self, current_pr_number: int) -> str:
         md = [COMMENT_BEGIN, COMMENT_FIRST_LINE, '']
         for record in self.stack.traverse():
+            if record.branch_name is None:
+                continue
             prs = self.get_prs(record.branch_name)
             if prs:
                 for pr in prs:
@@ -180,10 +189,11 @@ class GH:
     def _search_stack_prs(self) -> dict[str, list[ghgql.PR]]:
         prs = dict[str, list[ghgql.PR]]()
         for record in self.stack.traverse():
-            if not record.get_parent():
+            if not record.get_parent() and record.branch_name is not None:
                 prs[record.branch_name] = []
 
-        heads = [record.branch_name for record in self.stack.traverse() if record.get_parent() or not record.length()]
+        heads = [record.branch_name for record in self.stack.traverse()
+                 if (record.get_parent() or not record.length()) and record.branch_name is not None]
         for pr in ghgql.search_prs(self.token, self.owner, self.repository, heads):
             if pr.head not in prs:
                 prs.update({pr.head: [pr]})
@@ -208,8 +218,11 @@ class GH:
         return True
 
     def update_pr(self, record: Stack, pr: ghgql.PR) -> bool:
-        base = record.get_parent().branch_name
-        if pr.base == base:
+        parent = record.get_parent()
+        if parent is None:
+            return False
+        base = parent.branch_name
+        if base is None or pr.base == base:
             return False
         logging.debug('updating PR base from %s to %s', pr.base, base)
         ghgql.graphql(
@@ -232,7 +245,6 @@ class GH:
         repository_id = repo_id_json['data']['repository']['id']
         head = f'{self.owner}:{branch_name}'
         title = json.dumps(title or branch_name, ensure_ascii=False)
-        draft = 'true' if draft else 'false'
         body = json.dumps(self.template, ensure_ascii=False)
 
         pr_json = ghgql.graphql(
@@ -243,12 +255,14 @@ class GH:
                     baseRefName=f'"{base}"',
                     headRefName=f'"{head}"',
                     title=title,
-                    draft=draft,
+                    draft='true' if draft else 'false',
                     body=body,
                 )
             ),
         )
         pr = ghgql.make_pr({'node': pr_json['data']['createPullRequest']['pullRequest']})
+        if self.__prs is None:
+            self.__prs = {}
         if branch_name in self.__prs:
             self.__prs[branch_name].append(pr)
         else:

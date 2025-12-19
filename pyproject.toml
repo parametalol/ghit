@@ -10,15 +10,15 @@ classifiers = [
     'Operating System :: OS Independent'
 ]
 authors = [
-    { name='Michaël Petrov', email='smartptr@gmail.com' },
+    { name='Michaël Petrov', email='github@parameta.lol' },
 ]
 dependencies = ['pygit2', 'requests']
 optional-dependencies = {testing=['pygit2', 'requests', 'pytest']}
 license = { file = "LICENSE" }
 
 [project.urls]
-Homepage = 'https://github.com/0x656b694d/ghit'
-Issues = 'https://github.com/0x656b694d/ghit/issues'
+Homepage = 'https://github.com/parametalol/ghit'
+Issues = 'https://github.com/parametalol/ghit/issues'
 
 [tool.hatch]
 version = {attr = 'ghit.__version__', path = 'src/ghit/__init__.py'}
@@ -33,12 +33,13 @@ build-backend = 'hatchling.build'
 [tool.ruff]
 line-length = 120
 target-version = 'py39'
-
-[tool.ruff.lint]
-select = ['E', 'F', 'W', 'I', 'YTT', 'FA', 'ISC', 'ICN', 'G', 'C90', 'N', 'UP', 'S', 'B', 'C4', 'DTZ', 'DJ', 'PIE', 'T20', 'PT', 'Q', 'RSE', 'RET', 'SIM', 'TID', 'TCH', 'INT', 'PTH', 'PL']
-flake8-quotes.inline-quotes = 'single'
+select = ['E', 'F', 'W', 'I', 'YTT', 'FA', 'ISC', 'ICN', 'G', 'C90', 'N', 'UP', 'S', 'B', 'C4', 'DTZ', 'DJ', 'PIE', 'T20', 'PT', 'Q', 'RSE', 'RET', 'SIM', 'TID', 'INT', 'PTH', 'PL']
 per-file-ignores.'*/tests/*' = ['S101']
-pylint.max-args = 8
+format.quote-style = 'single'
+lint.flake8-quotes.inline-quotes = 'single'
+
+[tool.pylint]
+max-args = 8
 
 [tool.black]
 line-length = 120

@@ -1,3 +1,5 @@
+import pygit2 as git
+
 from . import styling as s
 from .common import (
     Args,
@@ -47,7 +49,10 @@ def create(args: Args) -> None:
     else:
         parent = stack.add_child(current.branch_name)
 
-    branch = repo.branches.local.create(name=args.branch, commit=repo.get(repo.head.target))
+    head = repo.get(repo.head.target)
+    if head is None or not isinstance(head, git.Commit):
+        raise GhitError(s.danger('HEAD is not a Commit'))
+    branch = repo.branches.local.create(name=args.branch, commit=head)
 
     new_record = parent.add_child(args.branch)
     checkout(repo, new_record)

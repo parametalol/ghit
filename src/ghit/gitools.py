@@ -77,14 +77,37 @@ def checkout(repo: git.Repository, record: Stack) -> None:
     if not branch:
         terminal.stdout(
             s.danger('Error:'),
-            s.emphasis(branch_name),
+            s.emphasis(branch_name or '<empty>'),
             s.danger('not found in local.'),
         )
-        remote = repo.branches.remote['origin/' + branch_name]
-        if remote:
-            terminal.stdout('There is though a remote branch ' + s.emphasis(remote.branch_name) + '.')
+        if branch_name is not None:
+            remote = repo.branches.remote['origin/' + branch_name]
+            if remote:
+                terminal.stdout('There is though a remote branch ' + s.emphasis(remote.branch_name) + '.')
         return
     repo.checkout(branch)
     terminal.stdout(f'Checked-out {s.emphasis(branch.branch_name)}.')
     print_branch_info(repo, record, branch)
     print_upstream_info(repo, branch)
+
+
+def get_branches_containing_commit(repo: git.Repository, commit_hash: str):
+    for branch_name in repo.branches:
+        branch = repo.branches.get(branch_name)
+        for commit in repo.walk(branch.target, git.GIT_SORT_TOPOLOGICAL):
+            if str(commit.id) == commit_hash:
+                yield branch_name
+
+
+def insert(repo: git.Repository, branch_name: str, stack: Stack):
+    branch = repo.branches.get(branch_name)
+    commit = repo.get(branch.target)
+    if commit is None or not isinstance(commit, git.Commit):
+        return
+    parent_commits = commit.parents
+    for p in parent_commits:
+        for b in get_branches_containing_commit(repo, str(p.id)):
+            s = stack.find(b)
+            if s:
+                s.add_child(branch_name, True, False)
+                return
