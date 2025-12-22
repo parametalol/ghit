@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable
 
 import requests
 
@@ -55,11 +55,12 @@ GQL_PR = gql.fields(
 )
 
 
-def first_n_after(name: str, q: str, n: int, after: str, **opts):
+def first_n_after(name: str, q: str, n: int, after: str | None, **opts):
     return gql.paged(name, {'first': n, 'after': gql.cursor_or_null(after), **opts}, q)
 
 
 def make_prs_query(owner: str, repository: str, heads: list[str], after: str | None = None):
+    h = ' '.join(f'head:{head}' for head in heads)
     return gql.query(
         'query search_prs',
         first_n_after(
@@ -68,7 +69,7 @@ def make_prs_query(owner: str, repository: str, heads: list[str], after: str | N
             10,
             after,
             type='ISSUE',
-            query=f'"repo:{owner}/{repository} is:pr {heads}"',
+            query=f'"repo:{owner}/{repository} is:pr {h}"',
         ),
     )
 
@@ -173,21 +174,21 @@ def make_repo_id_query(owner: str, repository: str) -> str:
 # region mutations
 
 
-def make_add_comment_query(comment_input: any) -> str:
+def make_add_comment_query(comment_input: dict) -> str:
     return gql.query(
         'mutation add_pr_comment',
         gql.func('addComment', comment_input, 'clientMutationId'),
     )
 
 
-def make_update_comment_query(comment_input: any) -> str:
+def make_update_comment_query(comment_input: dict) -> str:
     return gql.query(
         'mutation update_pr_comment',
         gql.func('updateIssueComment', comment_input, 'clientMutationId'),
     )
 
 
-def make_create_pr_query(pr_input: any) -> str:
+def make_create_pr_query(pr_input: dict) -> str:
     return gql.query(
         'mutation create_pr',
         gql.func(
@@ -199,7 +200,7 @@ def make_create_pr_query(pr_input: any) -> str:
     )
 
 
-def make_update_pr_query(pr_input: any) -> str:
+def make_update_pr_query(pr_input: dict) -> str:
     return gql.query(
         'mutation update_pr',
         gql.func(
@@ -299,14 +300,15 @@ class PR:
 # region constructors
 
 
-def _make_author(obj: any) -> Author:
+def _make_author(obj: dict) -> Author:
+    name = gql.path(obj, 'name')
     return Author(
         login=obj['login'],
-        name=gql.path(obj, 'name'),
+        name=str(name) if name is not None else None,
     )
 
 
-def _make_reaction(edge: any) -> Reaction:
+def _make_reaction(edge: dict) -> Reaction:
     node = edge['node']
     return Reaction(
         content=node['content'],
@@ -314,7 +316,7 @@ def _make_reaction(edge: any) -> Reaction:
     )
 
 
-def query_reactions(subject: str, args: dict[str, any]) -> str:
+def query_reactions(subject: str, args: dict[str, dict]) -> str:
     return gql.query('query reactions', gql.func(subject, args, GQL_REACTION))
 
 
@@ -330,7 +332,7 @@ def query_pr_comments(owner: str, repository: str, pr: int) -> str:
     )
 
 
-def _make_comment(edge: any) -> Comment:
+def _make_comment(edge: dict) -> Comment:
     node = edge['node']
     return Comment(
         id=node['id'],
@@ -344,7 +346,7 @@ def _make_comment(edge: any) -> Comment:
     )
 
 
-def _make_review(edge: any) -> Review:
+def _make_review(edge: dict) -> Review:
     node = edge['node']
     return Review(
         author=_make_author(node['author']),
@@ -353,7 +355,7 @@ def _make_review(edge: any) -> Review:
     )
 
 
-def _make_commit(edge: any) -> Commit:
+def _make_commit(edge: dict) -> Commit:
     node = edge['node']
     return Commit(
         comments=gql.Pages('comments', _make_comment, node),
@@ -361,7 +363,7 @@ def _make_commit(edge: any) -> Commit:
     )
 
 
-def _make_thread(edge: any) -> ReviewThread:
+def _make_thread(edge: dict) -> ReviewThread:
     node = edge['node']
     return ReviewThread(
         path=node['path'],
@@ -372,7 +374,7 @@ def _make_thread(edge: any) -> ReviewThread:
     )
 
 
-def make_pr(edge: any) -> PR:
+def make_pr(edge: dict) -> PR:
     node = edge['node']
     return PR(
         number=node['number'],
@@ -399,7 +401,7 @@ def make_pr(edge: any) -> PR:
 # endregion constructors
 
 
-def graphql(token: str, query: str) -> any:
+def graphql(token: str, query: str) -> dict:
     logging.debug('query GH graphql: %s', query)
     response = requests.post(
         url=os.getenv('GITHUB_API_URL', 'https://api.github.com/graphql'),
@@ -418,7 +420,7 @@ def graphql(token: str, query: str) -> any:
     if 'errors' in result:
         for error in result['errors']:
             if 'type' in error:
-                terminal.stderr(f"{error['type']}: {error['message']}")
+                terminal.stderr(f'{error["type"]}: {error["message"]}')
             else:
                 terminal.stderr(error['message'])
 
@@ -426,18 +428,16 @@ def graphql(token: str, query: str) -> any:
     return result
 
 
-def search_prs(token: str, owner: str, repository: str, branches: list[str] = None) -> list[PR]:
+def search_prs(token: str, owner: str, repository: str, branches: list[str] | None = None) -> list[PR]:
     if branches is None:
         branches = []
     if not branches:
         return []
 
-    heads = ' '.join(f'head:{branch}' for branch in branches)
-
     prs_pages = gql.Pages('search', make_pr)
     prs_pages.append_all(
         lambda after: gql.path(
-            graphql(token, make_prs_query(owner, repository, heads, after)),
+            graphql(token, make_prs_query(owner, repository, branches, after)),
             'data',
         )
     )
@@ -495,12 +495,9 @@ def _fetch_level_two(token: str, owner: str, repository: str, pr_path: list[str]
     for comment in pr.comments.data:
         comment.reactions.append_all(
             lambda after, cc=comment.cursor: gql.path(
-                graphql(
-                    token,
-                    GQL_PR_COMMENT_REACTIONS_QUERY(owner, repository, pr.number, cc, after),
-                    *pr_path,
-                    'comments',
-                )
+                graphql(token, GQL_PR_COMMENT_REACTIONS_QUERY(owner, repository, pr.number, cc, after)),
+                *pr_path,
+                'comments',
             )
         )
     for thread in pr.threads.data:

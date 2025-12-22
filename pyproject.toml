@@ -2,7 +2,7 @@
 name = 'ghit-smartptr'
 description = 'ghit'
 readme = 'README.md'
-requires-python = '>=3.9,<4.0'
+requires-python = '>=3.11,<4.0'
 dynamic = ['version']
 classifiers = [
     'Programming Language :: Python :: 3',
@@ -32,9 +32,9 @@ build-backend = 'hatchling.build'
 
 [tool.ruff]
 line-length = 120
-target-version = 'py39'
-select = ['E', 'F', 'W', 'I', 'YTT', 'FA', 'ISC', 'ICN', 'G', 'C90', 'N', 'UP', 'S', 'B', 'C4', 'DTZ', 'DJ', 'PIE', 'T20', 'PT', 'Q', 'RSE', 'RET', 'SIM', 'TID', 'INT', 'PTH', 'PL']
-per-file-ignores.'*/tests/*' = ['S101']
+target-version = 'py311'
+lint.select = ['E', 'F', 'W', 'I', 'YTT', 'FA', 'ISC', 'ICN', 'G', 'C90', 'N', 'UP', 'S', 'B', 'C4', 'DTZ', 'DJ', 'PIE', 'T20', 'PT', 'Q', 'RSE', 'RET', 'SIM', 'TID', 'INT', 'PTH', 'PL']
+lint.per-file-ignores.'*/tests/*' = ['S101']
 format.quote-style = 'single'
 lint.flake8-quotes.inline-quotes = 'single'
 
@@ -43,7 +43,7 @@ max-args = 8
 
 [tool.black]
 line-length = 120
-target-version = ['py39']
+target-version = ['py311']
 skip-string-normalization = true
 
 [project.scripts]

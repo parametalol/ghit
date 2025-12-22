@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable, Generic, TypeVar
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -24,12 +25,12 @@ def on(t: str, *f) -> str:
 query = obj
 
 
-def func(name: str, args: dict[str, str], *f: str) -> str:
+def func(name: str, args: dict, *f: str) -> str:
     extra = ', '.join(f'{k}: {v}' for k, v in args.items())
     return obj(f'{name}({extra})', *f)
 
 
-def paged(name: str, args: dict[str, str], *f: str) -> str:
+def paged(name: str, args: dict, *f: str) -> str:
     return func(
         name,
         args,
@@ -47,13 +48,13 @@ class Pages(Generic[T]):
     def __init__(
         self,
         name: str,
-        obj_ctor: Callable[[object], T],
+        obj_ctor: Callable[[dict], T],
         node: object = None,
     ) -> None:
         super().__init__()
         self.name = name
         self.obj_ctor = obj_ctor
-        self.next_cursor: str = last_edge_cursor(node, name)
+        self.next_cursor: str | None = last_edge_cursor(node, name)
         self.end_cursor, self.has_next_page = end_cursor(node, name) if node else (None, True)
         self.data = list(map(obj_ctor, edges(node, name))) if node else []
 
@@ -102,7 +103,7 @@ def path(obj: object, *keys: str | int) -> object | None:
     return obj
 
 
-def edges(obj: object, name: str) -> Iterator[object]:
+def edges(obj: object, name: str) -> Iterator[dict]:
     edges = path(obj, name, 'edges')
     if edges and isinstance(edges, list) or isinstance(edges, dict):
         yield from edges
