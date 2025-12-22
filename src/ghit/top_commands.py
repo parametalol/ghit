@@ -12,7 +12,7 @@ from .common import GHIT_STACK_DIR, connect, stack_filename
 from .error import GhitError
 from .gh import GH
 from .gh_formatting import format_info
-from .gitools import checkout, get_current_branch
+from .gitools import checkout, get_current_branch, insert
 from .stack import Stack, open_stack
 
 
@@ -57,6 +57,9 @@ def ls(args: Args) -> None:
     checked_out = get_current_branch(repo).branch_name
     parent_prefix: list[str] = []
 
+    if not stack.find(checked_out):
+        insert(repo, checked_out, stack)
+
     for record in stack.traverse():
         parent_prefix = parent_prefix[: max(record.depth - 1, 0)]
 
@@ -99,8 +102,12 @@ def _print_line(
             else:
                 behind = 0
 
-        g1 = '└' if record.is_last_child() else '├'
-        g2 = '⭦' if behind else '─'
+        if record.is_in_stack():
+            g1 = '└' if record.is_last_child() else '├'
+            g2 = '⭦' if behind else '─'
+        else:
+            g1 = '╵' if record.is_last_child() else '┆'
+            g2 = '⭦' if behind else '┄'
         line.append(g1 + g2)
 
     line.append(
@@ -139,6 +146,10 @@ def _print_line(
 def _move(args: Args, command: str) -> None:
     repo, stack, _ = connect(args)
     current = get_current_branch(repo).branch_name
+
+    if not stack.find(current):
+        insert(repo, current, stack)
+
     i = stack.traverse()
     p = None
     record = None

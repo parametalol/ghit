@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import logging
 import os
 from pathlib import Path
+from typing import Optional, cast
 
 import pygit2 as git
 
@@ -17,7 +20,7 @@ from .stack import Stack, open_stack
 
 
 class ConnectionsCache:
-    _connections: tuple[git.Repository, Stack, GH] = None
+    _connections: Optional[tuple[git.Repository, Stack, GH | None]] = None
 
 
 GHIT_STACK_DIR = '.ghit'
@@ -29,9 +32,9 @@ def stack_filename(repo: git.Repository) -> Path:
     return Path(env) if env else Path(repo.path).resolve().parent / GHIT_STACK_DIR / GHIT_STACK_FILENAME
 
 
-def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
-    if ConnectionsCache._connections:
-        return ConnectionsCache._connections
+def connect(args: Args) -> tuple[git.Repository, Stack, GH | None]:
+    if ConnectionsCache._connections is not None:
+        return cast(tuple[git.Repository, Stack, GH | None], ConnectionsCache._connections)
     repo = git.Repository(args.repository)
     if repo.is_empty:
         return repo, Stack(), None
@@ -42,6 +45,8 @@ def connect(args: Args) -> tuple[git.Repository, Stack, GH]:
             raise GhitError(s.danger('No stack found in ' + args.stack))
         stack = Stack()
         current = get_current_branch(repo)
+        if current is None or current.branch_name is None:
+            raise GhitError(s.danger('No current branch found'))
         stack.add_child(current.branch_name)
     ConnectionsCache._connections = (repo, stack, init_gh(repo, stack, args.offline))
     return ConnectionsCache._connections
@@ -71,7 +76,7 @@ def push_branch(origin: git.Remote, branch: git.Branch):
         'Pushed ',
         s.emphasis(branch.branch_name),
         ' to remote ',
-        s.emphasis(origin.url),
+        s.emphasis(origin.url or '<empty>'),
         '.',
         sep='',
     )
@@ -85,6 +90,8 @@ def push_and_pr(
     title: str = '',
     draft: bool = False,
 ) -> tuple[list[ghgql.PR], bool]:
+    if record.branch_name is None:
+        raise GhitError(s.danger('Record has no branch name'))
     branch = repo.branches[record.branch_name]
     if not branch.upstream:
         push_branch(origin, branch)
@@ -104,7 +111,10 @@ def push_and_pr(
                 terminal.stdout(f'Set PR {pr_number_with_style(pr)} base branch to {s.emphasis(pr.base)}.')
 
     else:
-        pr = gh.create_pr(record.get_parent().branch_name, record.branch_name, title, draft)
+        parent = record.get_parent()
+        if parent is None or parent.branch_name is None:
+            raise GhitError(s.danger('No parent branch to base PR on'))
+        pr = gh.create_pr(parent.branch_name, record.branch_name, title, draft)
         terminal.stdout(
             'Created draft PR ' if draft else 'Created PR ',
             pr_number_with_style(pr),
@@ -116,12 +126,14 @@ def push_and_pr(
     return prs, False
 
 
-def rewrite_stack(args_stack: str, repo: git.Repository, stack: Stack):
+def rewrite_stack(args_stack: Optional[str], repo: git.Repository, stack: Stack):
     with (Path(args_stack) if args_stack else stack_filename(repo)).open('w') as ghit_stack:
         ghit_stack.write('\n'.join(stack.dumps()) + '\n')
 
 
 def has_finished_pr(repo: git.Repository, gh: GH, record: Stack):
+    if record.branch_name is None:
+        return False
     prs = gh.get_prs(record.branch_name)
     all_finished = all(pr.state in ['CLOSED', 'MERGED'] and repo.lookup_branch(record.branch_name) for pr in prs)
     for pr in prs:
@@ -142,15 +154,23 @@ def has_finished_pr(repo: git.Repository, gh: GH, record: Stack):
     return prs and all_finished
 
 
-def check_record(repo: git.Repository, gh: GH, record: Stack) -> bool:
+def check_record(repo: git.Repository, gh: GH | None, record: Stack) -> bool:
     if gh and has_finished_pr(repo, gh, record):
         return True
     parent = record.get_parent()
     if parent is None:
         return True
-    parent_ref = repo.references.get(f'refs/heads/{parent.branch_name}')
-    ref = repo.references.get(f'refs/heads/{record.branch_name}')
+    if parent.branch_name is None:
+        return True
+    if record.branch_name is None:
+        return True
+    parent_name = parent.branch_name
+    record_name = record.branch_name
+    parent_ref = repo.references.get(f'refs/heads/{parent_name}')
+    ref = repo.references.get(f'refs/heads/{record_name}')
     if not ref:
+        return True
+    if not parent_ref:
         return True
     a, b = repo.ahead_behind(parent_ref.target, ref.target)
     if not a:
@@ -158,9 +178,9 @@ def check_record(repo: git.Repository, gh: GH, record: Stack) -> bool:
 
     terminal.stdout(
         s.warning('🗶'),
-        s.emphasis(record.get_parent().branch_name),
+        s.emphasis(parent.branch_name),
         s.warning('is ahead of'),
-        s.emphasis(record.branch_name),
+        s.emphasis(record_name),
         s.warning(f'with {a} commits:' if a != 1 else f'with {a} commit:'),
     )
 
@@ -171,9 +191,9 @@ def check_record(repo: git.Repository, gh: GH, record: Stack) -> bool:
         terminal.stdout(
             ' ',
             s.warning('while'),
-            s.emphasis(record.branch_name),
+            s.emphasis(record_name),
             s.warning((f'has {b} commits' if b != 1 else f'has {b} commit') + ' on top of'),
-            s.emphasis(record.get_parent().branch_name) + s.warning(':'),
+            s.emphasis(parent.branch_name) + s.warning(':'),
         )
         for commit in last_commits(repo, ref.target, b):
             terminal.stdout(s.inactive(f'\t[{commit.short_id}] {commit.message.splitlines()[0]}'))
@@ -181,9 +201,9 @@ def check_record(repo: git.Repository, gh: GH, record: Stack) -> bool:
     terminal.stdout(
         ' ',
         s.warning('Run `') + 'git rebase -i --onto',
-        s.emphasis(record.get_parent().branch_name),
-        s.emphasis(record.branch_name) + s.warning(f'~{b}'),
-        s.emphasis(record.branch_name) + s.warning('`.'),
+        s.emphasis(parent.branch_name),
+        s.emphasis(record_name) + s.warning(f'~{b}'),
+        s.emphasis(record_name) + s.warning('`.'),
     )
     terminal.stdout()
 

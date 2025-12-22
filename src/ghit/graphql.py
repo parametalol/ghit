@@ -47,8 +47,8 @@ class Pages(Generic[T]):
     def __init__(
         self,
         name: str,
-        obj_ctor: Callable[[any], T],
-        node: any = None,
+        obj_ctor: Callable[[object], T],
+        node: object = None,
     ) -> None:
         super().__init__()
         self.name = name
@@ -87,35 +87,37 @@ def input(**args) -> dict[str, str]:
     return {'input': f'{{ {extra} }}'}
 
 
-def path(obj: any, *keys: str | int) -> any:
+def path(obj: object, *keys: str | int) -> object | None:
     if not obj:
         return None
     for k in keys:
-        if isinstance(obj, list):
+        if isinstance(obj, list) and isinstance(k, int):
             if obj and len(obj) > (k if k >= 0 else len(obj) + k):
                 obj = obj[k]
                 continue
-        elif k in obj:
+        elif isinstance(obj, dict) and k in obj:
             obj = obj[k]
             continue
         return None
     return obj
 
 
-def edges(obj: any, name: str) -> Iterator[any]:
+def edges(obj: object, name: str) -> Iterator[object]:
     edges = path(obj, name, 'edges')
-    if edges:
+    if edges and isinstance(edges, list) or isinstance(edges, dict):
         yield from edges
 
 
-def last_edge_cursor(obj: any, field: str) -> str:
-    return path(obj, field, 'edges', -1, 'cursor')
+def last_edge_cursor(obj: object, field: str) -> str | None:
+    result = path(obj, field, 'edges', -1, 'cursor')
+    return str(result) if result is not None else None
 
 
-def end_cursor(obj: any, field: str) -> tuple[str, bool]:
+def end_cursor(obj: object, field: str) -> tuple[str | None, bool]:
     if not obj:
         return None, False
-    return path(obj, field, 'pageInfo', 'endCursor'), bool(path(obj, field, 'pageInfo', 'hasNextPage'))
+    result = path(obj, field, 'pageInfo', 'endCursor')
+    return (str(result) if result is not None else None), bool(path(obj, field, 'pageInfo', 'hasNextPage'))
 
 
 # endregion helpers

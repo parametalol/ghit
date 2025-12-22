@@ -16,15 +16,17 @@ class Stack:
         branch_name: str | None = None,
         enabled: bool = False,
         parent: Stack | None = None,
+        in_stack: bool = True
     ):
         self.branch_name = branch_name
         self.__parent = parent
         self._enabled = enabled
+        self._in_stack = in_stack
         self.depth = parent.depth + 1 if parent else -1
         self._index = parent.length() if parent else 0
         self._children = dict[str, Stack]()
 
-    def get_parent(self, ignore_enabled: bool = False) -> Stack:
+    def get_parent(self, ignore_enabled: bool = False) -> Stack | None:
         if self.__parent is None:
             return None
         p = self.__parent
@@ -33,15 +35,19 @@ class Stack:
     def disable(self) -> None:
         self._enabled = False
 
-    def add_child(self, branch_name: str, enabled: bool = True) -> Stack:
+    def add_child(self, branch_name: str, enabled: bool = True, in_stack: bool = True) -> Stack:
         if branch_name in self._children:
             raise GhitError(f"'{branch_name}' already exist in '{self.branch_name}'")
-        child = Stack(branch_name, enabled, self)
+        child = Stack(branch_name, enabled, self, in_stack)
         self._children.update({branch_name: child})
         return child
 
     def is_last_child(self) -> bool:
-        return self.is_root() or self._index == self.get_parent().length() - 1
+        parent = self.get_parent()
+        return self.is_root() or parent is not None and self._index == parent.length() - 1
+
+    def is_in_stack(self) -> bool:
+        return self._in_stack
 
     def length(self) -> int:
         # Skip disabled children
@@ -63,7 +69,7 @@ class Stack:
         for r in self._children.values():
             yield from r.traverse(with_first_level, ignored_disabled)
 
-    def find(self, branch_name: str) -> Stack:
+    def find(self, branch_name: str) -> Stack | None:
         for s in self.traverse(True, True):
             if s.branch_name == branch_name:
                 return s
@@ -83,17 +89,17 @@ class Stack:
                     yield record
             depth -= 1
 
-    def dumps(self, lines: list[str] = None, depth: int = 0) -> list[str]:
+    def dumps(self, lines: list[str] | None = None, depth: int = 0) -> list[str]:
         if lines is None:
             lines = []
         if not self.is_root():
-            lines.append(('' if self._enabled else '#') + '.' * depth + self.branch_name)
+            lines.append(('' if self._enabled else '#') + '.' * depth + self.branch_name) # type: ignore
         for record in self._children.values():
             record.dumps(lines, depth + (not self.is_root()))
         return lines
 
 
-def parse_line(line: str, parents: list[Stack]) -> Stack:
+def parse_line(line: str, parents: list[Stack]) -> Stack | None:
     line = line.strip(' \t\r\n')
     enabled = not line.startswith('#')
     stack_line = line.lstrip('#').lstrip()
@@ -107,11 +113,11 @@ def parse_line(line: str, parents: list[Stack]) -> Stack:
 
     while True:
         parent = parents[-1] if parents else None
-        if not parent.branch_name or parent.depth < depth:
+        if parent is None or not parent.branch_name or parent.depth < depth:
             break
         parents.pop()
 
-    if enabled and depth - parent.depth > 1:
+    if parent is None or enabled and depth - parent.depth > 1:
         raise GhitError('bad indent')
 
     logging.debug('parsed: %s%s%s parent: %s', '' if enabled else '#', '.'*depth, branch_name, parent.branch_name)
@@ -121,7 +127,7 @@ def parse_line(line: str, parents: list[Stack]) -> Stack:
     return child
 
 
-def parse(lines: Iterator[str]) -> Stack:
+def parse(lines: list[str] | Iterator[str]) -> Stack:
     stack = Stack()
     parents = [stack]
     for i, line in enumerate(lines, start=1):

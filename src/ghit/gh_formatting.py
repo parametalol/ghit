@@ -77,16 +77,19 @@ def _format_approved(approved: list[Review]) -> Iterator[str]:
 
 
 def _format_not_sync(gh: GH, record: Stack, pr: PR) -> Iterator[str]:
-    if not record.get_parent():
+    if not record.get_parent() or record.branch_name is None:
         return
     for p in gh.get_prs(record.branch_name):
-        if p.number == pr.number and p.base != record.get_parent().branch_name:
+        parent = record.get_parent()
+        if parent is None:
+            continue
+        if p.number == pr.number and p.base != parent.branch_name:
             yield s.with_style(
                 'dim',
                 s.warning('⟳ PR base ')
                 + s.emphasis(p.base)
                 + s.warning(" doesn't match branch parent ")
-                + s.emphasis(record.get_parent().branch_name)
+                + s.emphasis(parent.branch_name or '<empty>')
                 + s.warning('.'),
             )
 
