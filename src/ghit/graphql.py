@@ -108,14 +108,16 @@ def edges(obj: object, name: str) -> Iterator[object]:
         yield from edges
 
 
-def last_edge_cursor(obj: object, field: str) -> str:
-    return str(path(obj, field, 'edges', -1, 'cursor'))
+def last_edge_cursor(obj: object, field: str) -> str | None:
+    result = path(obj, field, 'edges', -1, 'cursor')
+    return str(result) if result is not None else None
 
 
-def end_cursor(obj: object, field: str) -> tuple[str, bool]:
+def end_cursor(obj: object, field: str) -> tuple[str | None, bool]:
     if not obj:
-        return '', False
-    return str(path(obj, field, 'pageInfo', 'endCursor')), bool(path(obj, field, 'pageInfo', 'hasNextPage'))
+        return None, False
+    result = path(obj, field, 'pageInfo', 'endCursor')
+    return (str(result) if result is not None else None), bool(path(obj, field, 'pageInfo', 'hasNextPage'))
 
 
 # endregion helpers
