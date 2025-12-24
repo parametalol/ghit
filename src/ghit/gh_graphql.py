@@ -386,7 +386,7 @@ class SimplePR:
 # region constructors
 
 
-def _make_author(obj: dict | None) -> Author:
+def _make_author(obj: gql.GqlNode | None) -> Author:
     if obj is None:
         return Author(login='ghost', name=None)
     name = gql.path(obj, 'name')
@@ -396,7 +396,7 @@ def _make_author(obj: dict | None) -> Author:
     )
 
 
-def _make_reaction(edge: dict) -> Reaction:
+def _make_reaction(edge: gql.GqlNode) -> Reaction:
     node = edge['node']
     return Reaction(
         content=node['content'],
@@ -420,7 +420,7 @@ def query_pr_comments(owner: str, repository: str, pr: int) -> str:
     )
 
 
-def _make_comment(edge: dict) -> Comment:
+def _make_comment(edge: gql.GqlNode) -> Comment:
     node = edge['node']
     return Comment(
         id=node['id'],
@@ -434,7 +434,7 @@ def _make_comment(edge: dict) -> Comment:
     )
 
 
-def _make_review(edge: dict) -> Review:
+def _make_review(edge: gql.GqlNode) -> Review:
     node = edge['node']
     return Review(
         author=_make_author(node['author']),
@@ -443,7 +443,7 @@ def _make_review(edge: dict) -> Review:
     )
 
 
-def _make_commit(edge: dict) -> Commit:
+def _make_commit(edge: gql.GqlNode) -> Commit:
     node = edge['node']
     return Commit(
         comments=gql.Pages('comments', _make_comment, node),
@@ -451,7 +451,7 @@ def _make_commit(edge: dict) -> Commit:
     )
 
 
-def _make_thread(edge: dict) -> ReviewThread:
+def _make_thread(edge: gql.GqlNode) -> ReviewThread:
     node = edge['node']
     return ReviewThread(
         path=node['path'],
@@ -462,7 +462,7 @@ def _make_thread(edge: dict) -> ReviewThread:
     )
 
 
-def make_pr(edge: dict) -> PR:
+def make_pr(edge: gql.GqlNode) -> PR:
     node = edge['node']
     return PR(
         number=node['number'],
@@ -486,7 +486,7 @@ def make_pr(edge: dict) -> PR:
     )
 
 
-def _make_simple_pr(edge: dict) -> SimplePR:
+def _make_simple_pr(edge: gql.GqlNode) -> SimplePR:
     node = edge['node']
     return SimplePR(
         number=node['number'],
@@ -496,7 +496,7 @@ def _make_simple_pr(edge: dict) -> SimplePR:
     )
 
 
-def make_pr_light(edge: dict) -> PR:
+def make_pr_light(edge: gql.GqlNode) -> PR:
     """Create PR from light query (no body, comments, commits)."""
     node = edge['node']
     return PR(
