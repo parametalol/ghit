@@ -98,9 +98,7 @@ def _render_menu(lines: list[tuple[fmt.BranchState, list[fmt.LinePart]]], select
         print(f'{_CLEAR_LINE}{line}', flush=True)  # noqa: T201
 
 
-def _run_navigate(
-    lines: list[tuple[fmt.BranchState, list[fmt.LinePart]]], current_idx: int
-) -> fmt.BranchState | None:
+def _run_navigate(lines: list[tuple[fmt.BranchState, list[fmt.LinePart]]], current_idx: int) -> fmt.BranchState | None:
     """Run the inline interactive selection loop."""
     selected = current_idx
     num_lines = len(lines)

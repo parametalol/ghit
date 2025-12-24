@@ -133,4 +133,3 @@ def render_line_ansi(parts: list[LinePart], current: bool = False) -> str:
                 result.append(line_color(part.text))
 
     return ''.join(result)
-

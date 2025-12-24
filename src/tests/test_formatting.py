@@ -189,4 +189,3 @@ class TestRenderLinePlain:
             LinePart('d', 'current'),
         ]
         assert render_line_plain(parts) == 'abcd'
-
