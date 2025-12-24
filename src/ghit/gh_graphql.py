@@ -169,6 +169,24 @@ def make_repo_id_query(owner: str, repository: str) -> str:
     )
 
 
+GQL_PR_SIMPLE = gql.fields('number', 'baseRefName', 'headRefName', 'state')
+
+
+def make_user_open_prs_query(owner: str, repository: str, after: str | None = None):
+    """Query to fetch the current user's open PRs in a repository."""
+    return gql.query(
+        'query user_open_prs',
+        first_n_after(
+            'search',
+            gql.on('PullRequest', GQL_PR_SIMPLE),
+            100,
+            after,
+            type='ISSUE',
+            query=f'"repo:{owner}/{repository} is:pr is:open author:@me"',
+        ),
+    )
+
+
 # endregion query
 
 # region mutations
@@ -295,6 +313,15 @@ class PR:
         return self.number
 
 
+@dataclass
+class SimplePR:
+    """A simplified PR with just base and head branch names."""
+    number: int
+    base: str
+    head: str
+    state: str
+
+
 # endregion classes
 
 # region constructors
@@ -395,6 +422,16 @@ def make_pr(edge: dict) -> PR:
         threads=gql.Pages('reviewThreads', _make_thread, node),
         reviews=gql.Pages('reviews', _make_review, node),
         commits=gql.Pages('commits', _make_commit, node),
+    )
+
+
+def _make_simple_pr(edge: dict) -> SimplePR:
+    node = edge['node']
+    return SimplePR(
+        number=node['number'],
+        base=node['baseRefName'],
+        head=node['headRefName'],
+        state=node['state'],
     )
 
 
@@ -573,3 +610,16 @@ def _fetch_level_three(token: str, owner: str, repository: str, pr_path: list[st
                     'reactions',
                 )
             )
+
+
+def search_user_open_prs(token: str, owner: str, repository: str) -> list[SimplePR]:
+    """Fetch all open PRs authored by the current user in the given repository."""
+    prs_pages = gql.Pages('search', _make_simple_pr)
+    prs_pages.append_all(
+        lambda after: gql.path(
+            graphql(token, make_user_open_prs_query(owner, repository, after)),
+            'data',
+        )
+    )
+    logging.debug('Fetched %d open PRs for current user.', len(prs_pages.data))
+    return prs_pages.data

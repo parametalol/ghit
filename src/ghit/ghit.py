@@ -63,8 +63,15 @@ def add_stack_commands(parser: argparse.ArgumentParser, common: argparse.Argumen
         parents=[common],
     ).set_defaults(func=scom.stack_submit)
     parser_stack_sub.add_parser(
-        'cleanup', help='removes unexisting branches from the stack, or the ones with merged PRs', parents=[common]
+        'cleanup',
+        help='removes unexisting branches from the stack, or the ones with merged PRs',
+        parents=[common],
     ).set_defaults(func=scom.cleanup)
+    parser_stack_sub.add_parser(
+        'import',
+        help="fetch user's open PRs from GitHub and append the branch tree to the stack",
+        parents=[common],
+    ).set_defaults(func=scom.import_prs)
 
 
 def add_branch_commands(parser: argparse.ArgumentParser, common: argparse.ArgumentParser) -> None:
