@@ -1,8 +1,9 @@
 import pygit2 as git
 
 from . import styling as s
+from .args import Args
 from .common import (
-    Args,
+    Context,
     check_record,
     connect,
     push_and_pr,
@@ -13,16 +14,16 @@ from .gitools import checkout, get_current_branch
 
 
 def branch_submit(args: Args) -> None:
-    repo, stack, gh = connect(args)
-    if not gh:
+    ctx = connect(args)
+    if not ctx.gh:
         return
-    origin = repo.remotes['origin']
+    origin = ctx.repo.remotes['origin']
     if not origin:
         raise GhitError(s.danger('No origin found for the repository.'))
-    current = get_current_branch(repo)
-    for record in stack.traverse():
+    current = get_current_branch(ctx.repo)
+    for record in ctx.stack.traverse():
         if record.branch_name == current.branch_name:
-            push_and_pr(repo, gh, origin, record, args.title, args.draft)
+            push_and_pr(ctx, origin, record, args.title, args.draft)
             break
     else:
         raise GhitError(
@@ -32,35 +33,35 @@ def branch_submit(args: Args) -> None:
 
 
 def create(args: Args) -> None:
-    repo, stack, _ = connect(args)
+    ctx = connect(args)
 
-    branch = repo.lookup_branch(args.branch)
+    branch = ctx.repo.lookup_branch(args.branch)
     if branch:
         raise GhitError(
             s.danger('Branch ') + s.emphasis(args.branch) + s.danger(' already exists.'),
         )
 
-    current = get_current_branch(repo)
+    current = get_current_branch(ctx.repo)
     parent = None
-    for record in stack.traverse(True):
+    for record in ctx.stack.traverse(True):
         if record.branch_name == current.branch_name:
             parent = record
             break
     else:
-        parent = stack.add_child(current.branch_name)
+        parent = ctx.stack.add_child(current.branch_name)
 
-    head = repo.get(repo.head.target)
+    head = ctx.repo.get(ctx.repo.head.target)
     if head is None or not isinstance(head, git.Commit):
         raise GhitError(s.danger('HEAD is not a Commit'))
-    branch = repo.branches.local.create(name=args.branch, commit=head)
+    branch = ctx.repo.branches.local.create(name=args.branch, commit=head)
 
     new_record = parent.add_child(args.branch)
-    checkout(repo, new_record)
+    checkout(ctx.repo, new_record)
 
-    rewrite_stack(args.stack, repo, stack)
+    rewrite_stack(ctx)
 
 
 def check(args: Args) -> None:
-    repo, stack, gh = connect(args)
-    if not check_record(repo, gh, stack):
+    ctx = connect(args)
+    if not check_record(ctx, ctx.stack):
         raise GhitError

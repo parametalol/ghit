@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, cast
 
 import pygit2 as git
 
@@ -19,8 +19,29 @@ from .gitools import MyRemoteCallback, get_current_branch, last_commits
 from .stack import Stack, open_stack
 
 
+@dataclass
+class Context:
+    """Holds the repository, stack, and optional GitHub connection."""
+    repo: git.Repository
+    stack: Stack
+    gh: GH | None
+    args: Args
+
+    @property
+    def is_empty(self) -> bool:
+        return self.repo.is_empty
+
+    @property
+    def offline(self) -> bool:
+        return self.args.offline
+
+    @property
+    def verbose(self) -> bool:
+        return self.args.verbose
+
+
 class ConnectionsCache:
-    _connections: Optional[tuple[git.Repository, Stack, GH | None]] = None
+    _context: Context | None = None
 
 
 GHIT_STACK_DIR = '.ghit'
@@ -32,12 +53,12 @@ def stack_filename(repo: git.Repository) -> Path:
     return Path(env) if env else Path(repo.path).resolve().parent / GHIT_STACK_DIR / GHIT_STACK_FILENAME
 
 
-def connect(args: Args) -> tuple[git.Repository, Stack, GH | None]:
-    if ConnectionsCache._connections is not None:
-        return cast(tuple[git.Repository, Stack, GH | None], ConnectionsCache._connections)
+def connect(args: Args) -> Context:
+    if ConnectionsCache._context is not None:
+        return ConnectionsCache._context
     repo = git.Repository(args.repository)
     if repo.is_empty:
-        return repo, Stack(), None
+        return Context(repo=repo, stack=Stack(), gh=None, args=args)
     stack = open_stack(Path(args.stack) if args.stack else stack_filename(repo))
 
     if not stack:
@@ -48,8 +69,13 @@ def connect(args: Args) -> tuple[git.Repository, Stack, GH | None]:
         if current is None or current.branch_name is None:
             raise GhitError(s.danger('No current branch found'))
         stack.add_child(current.branch_name)
-    ConnectionsCache._connections = (repo, stack, init_gh(repo, stack, args.offline))
-    return ConnectionsCache._connections
+    ConnectionsCache._context = Context(
+        repo=repo,
+        stack=stack,
+        gh=init_gh(repo, stack, args.offline),
+        args=args,
+    )
+    return ConnectionsCache._context
 
 
 def update_upstream(repo: git.Repository, origin: git.Remote, branch: git.Branch):
@@ -83,8 +109,7 @@ def push_branch(origin: git.Remote, branch: git.Branch):
 
 
 def push_and_pr(
-    repo: git.Repository,
-    gh: GH,
+    ctx: Context,
     origin: git.Remote,
     record: Stack,
     title: str = '',
@@ -92,29 +117,31 @@ def push_and_pr(
 ) -> tuple[list[ghgql.PR], bool]:
     if record.branch_name is None:
         raise GhitError(s.danger('Record has no branch name'))
-    branch = repo.branches[record.branch_name]
+    if not ctx.gh:
+        raise GhitError(s.danger('No GitHub connection'))
+    branch = ctx.repo.branches[record.branch_name]
     if not branch.upstream:
         push_branch(origin, branch)
-        update_upstream(repo, origin, branch)
+        update_upstream(ctx.repo, origin, branch)
 
-    prs = gh.get_prs(record.branch_name)
+    prs = ctx.gh.get_prs(record.branch_name)
     for pr in prs:
         logging.debug('found pr: %d closed=%s merged=%s', pr.number, pr.closed, pr.merged)
     if prs:
         for pr in prs:
-            if gh.update_dependencies(pr):
+            if ctx.gh.update_dependencies(pr):
                 terminal.stdout(f'Updated dependencies in {pr_number_with_style(pr)}.')
 
             if pr.closed or pr.merged:
                 continue
-            if gh.update_pr(record, pr):
+            if ctx.gh.update_pr(record, pr):
                 terminal.stdout(f'Set PR {pr_number_with_style(pr)} base branch to {s.emphasis(pr.base)}.')
 
     else:
         parent = record.get_parent()
         if parent is None or parent.branch_name is None:
             raise GhitError(s.danger('No parent branch to base PR on'))
-        pr = gh.create_pr(parent.branch_name, record.branch_name, title, draft)
+        pr = ctx.gh.create_pr(parent.branch_name, record.branch_name, title, draft)
         terminal.stdout(
             'Created draft PR ' if draft else 'Created PR ',
             pr_number_with_style(pr),
@@ -126,18 +153,21 @@ def push_and_pr(
     return prs, False
 
 
-def rewrite_stack(args_stack: Optional[str], repo: git.Repository, stack: Stack):
-    with (Path(args_stack) if args_stack else stack_filename(repo)).open('w') as ghit_stack:
-        ghit_stack.write('\n'.join(stack.dumps()) + '\n')
+def rewrite_stack(ctx: Context) -> None:
+    filename = Path(ctx.args.stack) if ctx.args.stack else stack_filename(ctx.repo)
+    with filename.open('w') as ghit_stack:
+        ghit_stack.write('\n'.join(ctx.stack.dumps()) + '\n')
 
 
-def has_finished_pr(repo: git.Repository, gh: GH, record: Stack):
-    if record.branch_name is None:
+def has_finished_pr(ctx: Context, record: Stack) -> bool:
+    if record.branch_name is None or not ctx.gh:
         return False
-    prs = gh.get_prs(record.branch_name)
-    all_finished = all(pr.state in ['CLOSED', 'MERGED'] and repo.lookup_branch(record.branch_name) for pr in prs)
+    prs = ctx.gh.get_prs(record.branch_name)
+    all_finished = all(
+        pr.state in ['CLOSED', 'MERGED'] and ctx.repo.lookup_branch(record.branch_name) for pr in prs
+    )
     for pr in prs:
-        if pr.state in ['CLOSED', 'MERGED'] and repo.lookup_branch(record.branch_name):
+        if pr.state in ['CLOSED', 'MERGED'] and ctx.repo.lookup_branch(record.branch_name):
             terminal.stdout(
                 s.good('🗸 Found PR'),
                 ghf.pr_number_with_style(pr),
@@ -151,11 +181,11 @@ def has_finished_pr(repo: git.Repository, gh: GH, record: Stack):
             )
             terminal.stdout()
             break
-    return prs and all_finished
+    return bool(prs) and all_finished
 
 
-def check_record(repo: git.Repository, gh: GH | None, record: Stack) -> bool:
-    if gh and has_finished_pr(repo, gh, record):
+def check_record(ctx: Context, record: Stack) -> bool:
+    if ctx.gh and has_finished_pr(ctx, record):
         return True
     parent = record.get_parent()
     if parent is None:
@@ -166,13 +196,13 @@ def check_record(repo: git.Repository, gh: GH | None, record: Stack) -> bool:
         return True
     parent_name = parent.branch_name
     record_name = record.branch_name
-    parent_ref = repo.references.get(f'refs/heads/{parent_name}')
-    ref = repo.references.get(f'refs/heads/{record_name}')
+    parent_ref = ctx.repo.references.get(f'refs/heads/{parent_name}')
+    ref = ctx.repo.references.get(f'refs/heads/{record_name}')
     if not ref:
         return True
     if not parent_ref:
         return True
-    a, b = repo.ahead_behind(parent_ref.target, ref.target)
+    a, b = ctx.repo.ahead_behind(parent_ref.target, ref.target)
     if not a:
         return True
 
@@ -184,7 +214,7 @@ def check_record(repo: git.Repository, gh: GH | None, record: Stack) -> bool:
         s.warning(f'with {a} commits:' if a != 1 else f'with {a} commit:'),
     )
 
-    for commit in last_commits(repo, parent_ref.target, a):
+    for commit in last_commits(ctx.repo, parent_ref.target, a):
         terminal.stdout(s.inactive(f'\t[{commit.short_id}] {commit.message.splitlines()[0]}'))
 
     if b:
@@ -195,7 +225,7 @@ def check_record(repo: git.Repository, gh: GH | None, record: Stack) -> bool:
             s.warning((f'has {b} commits' if b != 1 else f'has {b} commit') + ' on top of'),
             s.emphasis(parent.branch_name) + s.warning(':'),
         )
-        for commit in last_commits(repo, ref.target, b):
+        for commit in last_commits(ctx.repo, ref.target, b):
             terminal.stdout(s.inactive(f'\t[{commit.short_id}] {commit.message.splitlines()[0]}'))
 
     terminal.stdout(

@@ -8,7 +8,7 @@ from . import styling as s
 from . import terminal
 from .__init__ import __version__
 from .args import Args
-from .common import GHIT_STACK_DIR, connect, stack_filename
+from .common import GHIT_STACK_DIR, Context, connect, stack_filename
 from .error import GhitError
 from .gh import GH
 from .gh_formatting import format_info
@@ -48,30 +48,30 @@ def _print_gh_info(
 
 
 def ls(args: Args) -> None:
-    repo, stack, gh = connect(args)
-    if repo.is_empty:
+    ctx = connect(args)
+    if ctx.is_empty:
         return
 
     error = 0
 
-    checked_out = get_current_branch(repo).branch_name
+    checked_out = get_current_branch(ctx.repo).branch_name
     parent_prefix: list[str] = []
 
-    if not stack.find(checked_out):
-        insert(repo, checked_out, stack)
+    if not ctx.stack.find(checked_out):
+        insert(ctx.repo, checked_out, ctx.stack)
 
-    for record in stack.traverse():
+    for record in ctx.stack.traverse():
         parent_prefix = parent_prefix[: max(record.depth - 1, 0)]
 
-        _print_line(repo, record.branch_name == checked_out, parent_prefix, record)
+        _print_line(ctx.repo, record.branch_name == checked_out, parent_prefix, record)
 
         if record.get_parent():
             parent_prefix.append(_parent_tab(record))
 
-        if gh:
+        if ctx.gh:
             error = max(
                 error,
-                _print_gh_info(args.verbose, gh, parent_prefix, record),
+                _print_gh_info(ctx.verbose, ctx.gh, parent_prefix, record),
             )
         else:
             terminal.stdout()
@@ -144,13 +144,13 @@ def _print_line(
 
 
 def _move(args: Args, command: str) -> None:
-    repo, stack, _ = connect(args)
-    current = get_current_branch(repo).branch_name
+    ctx = connect(args)
+    current = get_current_branch(ctx.repo).branch_name
 
-    if not stack.find(current):
-        insert(repo, current, stack)
+    if not ctx.stack.find(current):
+        insert(ctx.repo, current, ctx.stack)
 
-    i = stack.traverse()
+    i = ctx.stack.traverse()
     p = None
     record = None
     for r in i:
@@ -167,7 +167,7 @@ def _move(args: Args, command: str) -> None:
 
     if record:
         if record.branch_name != current:
-            checkout(repo, record)
+            checkout(ctx.repo, record)
     else:
         return _jump(args, 'top')
     return None
@@ -182,18 +182,18 @@ def down(args: Args) -> None:
 
 
 def _jump(args: Args, command: str) -> None:
-    repo, stack, _ = connect(args)
+    ctx = connect(args)
     record: Stack = None
     if command == 'top':
         try:
-            record = next(stack.traverse())
+            record = next(ctx.stack.traverse())
         except StopIteration:
             return
     else:
-        for r in stack.traverse():
+        for r in ctx.stack.traverse():
             record = r
-    if record and record.branch_name != get_current_branch(repo).branch_name:
-        checkout(repo, record)
+    if record and record.branch_name != get_current_branch(ctx.repo).branch_name:
+        checkout(ctx.repo, record)
     return
 
 
