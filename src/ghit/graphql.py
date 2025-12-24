@@ -2,10 +2,20 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+
+# GraphQL scalar types
+type GqlScalar = str | int | float | bool | None
+
+# Any value that can appear in a GraphQL response (recursive)
+type GqlValue = GqlScalar | list[GqlValue] | dict[str, GqlValue]
+
+# A GraphQL JSON node: a dict with string keys and GqlValue values
+type GqlNode = dict[str, GqlValue]
 
 # region builder
 
@@ -41,15 +51,13 @@ def paged(name: str, args: dict, *f: str) -> str:
 
 # endregion builder
 
-T = TypeVar('T')
 
-
-class Pages(Generic[T]):
+class Pages[T]:
     def __init__(
         self,
         name: str,
-        obj_ctor: Callable[[dict], T],
-        node: object = None,
+        obj_ctor: Callable[[GqlNode], T],
+        node: GqlNode | None = None,
     ) -> None:
         super().__init__()
         self.name = name
@@ -88,37 +96,38 @@ def input(**args) -> dict[str, str]:
     return {'input': f'{{ {extra} }}'}
 
 
-def path(obj: object, *keys: str | int) -> object | None:
-    if not obj:
+def path(node: GqlNode | None, *keys: str | int) -> GqlValue:
+    if not node:
         return None
+    current: GqlValue = node
     for k in keys:
-        if isinstance(obj, list) and isinstance(k, int):
-            if obj and len(obj) > (k if k >= 0 else len(obj) + k):
-                obj = obj[k]
+        if isinstance(current, list) and isinstance(k, int):
+            if current and len(current) > (k if k >= 0 else len(current) + k):
+                current = current[k]
                 continue
-        elif isinstance(obj, dict) and k in obj:
-            obj = obj[k]
+        elif isinstance(current, dict) and k in current:
+            current = current[k]
             continue
         return None
-    return obj
+    return current
 
 
-def edges(obj: object, name: str) -> Iterator[dict]:
-    edges = path(obj, name, 'edges')
-    if edges and isinstance(edges, list) or isinstance(edges, dict):
-        yield from edges
+def edges(node: GqlNode | None, name: str) -> Iterator[GqlNode]:
+    edge_list = path(node, name, 'edges')
+    if edge_list and isinstance(edge_list, (list, dict)):
+        yield from edge_list
 
 
-def last_edge_cursor(obj: object, field: str) -> str | None:
-    result = path(obj, field, 'edges', -1, 'cursor')
+def last_edge_cursor(node: GqlNode | None, field: str) -> str | None:
+    result = path(node, field, 'edges', -1, 'cursor')
     return str(result) if result is not None else None
 
 
-def end_cursor(obj: object, field: str) -> tuple[str | None, bool]:
-    if not obj:
+def end_cursor(node: GqlNode | None, field: str) -> tuple[str | None, bool]:
+    if not node:
         return None, False
-    result = path(obj, field, 'pageInfo', 'endCursor')
-    return (str(result) if result is not None else None), bool(path(obj, field, 'pageInfo', 'hasNextPage'))
+    result = path(node, field, 'pageInfo', 'endCursor')
+    return (str(result) if result is not None else None), bool(path(node, field, 'pageInfo', 'hasNextPage'))
 
 
 # endregion helpers
