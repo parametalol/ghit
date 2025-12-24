@@ -4,7 +4,8 @@ from ghit.gh import COMMENT_BEGIN, COMMENT_END, COMMENT_FIRST_LINE, _find_stack_
 def test_find_stack_comment():
     assert _find_stack_comment('body') is None
     body = ['body', COMMENT_BEGIN, COMMENT_FIRST_LINE, COMMENT_END]
-    assert _find_stack_comment('\n'.join(body)) == (5,105)
+    assert _find_stack_comment('\n'.join(body)) == (5, 105)
+
 
 def test_patch_body():
     assert _patch_body('body', 'comment') == 'body\ncomment'

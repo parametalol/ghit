@@ -60,9 +60,10 @@ def test_func():
 
 
 def test_paged():
-    assert paged(
-        'object', {'a': 1, 'b': '"word"'}, 'c', 'd'
-    ) == 'object(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } ' + 'edges{ cursor node{ c d } } }'
+    assert (
+        paged('object', {'a': 1, 'b': '"word"'}, 'c', 'd')
+        == 'object(a: 1, b: "word"){ pageInfo{ endCursor hasNextPage } ' + 'edges{ cursor node{ c d } } }'
+    )
 
 
 def test_cursor_or_null():

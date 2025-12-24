@@ -131,7 +131,7 @@ def test_parse_disabled():
     cases = [
         # (name, expected_parent_branch_or_None, expected_parent_with_disabled_branch_or_emptystr)
         # use None => parent is None, '' => parent exists but branch_name is None
-        ('main', None, ''),          # root has no parent, but get_parent(True) returns root node with branch_name None
+        ('main', None, ''),  # root has no parent, but get_parent(True) returns root node with branch_name None
         ('a2', 'main', 'disabled'),
         ('a21', 'main', 'disabled'),
         ('a3', 'a21', 'a21'),
@@ -157,7 +157,7 @@ def test_parse_disabled():
 
         parent_td = s.get_parent(True)
         # exp_parent_with_disabled uses '' to mean parent exists but branch_name is None
-        assert (parent_td is not None)
+        assert parent_td is not None
         if exp_parent_with_disabled == '':
             assert parent_td.branch_name is None
         else:

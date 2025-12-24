@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pygit2 as git
 
-from . import styling as s
+from . import formatting as fmt
 from . import terminal
 from .__init__ import __version__
 from .args import Args
@@ -14,10 +14,6 @@ from .gh import GH
 from .gh_formatting import format_info
 from .gitools import checkout, get_current_branch, insert
 from .stack import Stack, open_stack
-
-
-def _parent_tab(record: Stack) -> str:
-    return '  ' if record.is_last_child() else '│ '
 
 
 def _print_gh_info(
@@ -66,7 +62,7 @@ def ls(args: Args) -> None:
         _print_line(ctx.repo, record.branch_name == checked_out, parent_prefix, record)
 
         if record.get_parent():
-            parent_prefix.append(_parent_tab(record))
+            parent_prefix.append(fmt.parent_tab(record))
 
         if ctx.gh:
             error = max(
@@ -86,61 +82,10 @@ def _print_line(
     parent_prefix: list[str],
     record: Stack,
 ) -> None:
-    line_color = s.calm if current else s.normal
-    line = [line_color('⯈' if current else ' '), *parent_prefix]
-
-    behind = 0
-    branch = repo.branches.get(record.branch_name)
-    if record.get_parent():
-        if branch:
-            parent = repo.lookup_branch(record.get_parent().branch_name)
-            if parent:
-                behind, _ = repo.ahead_behind(
-                    parent.target,
-                    branch.target,
-                )
-            else:
-                behind = 0
-
-        if record.is_in_stack():
-            g1 = '└' if record.is_last_child() else '├'
-            g2 = '⭦' if behind else '─'
-        else:
-            g1 = '╵' if record.is_last_child() else '┆'
-            g2 = '⭦' if behind else '┄'
-        line.append(g1 + g2)
-
-    line.append(
-        (s.deleted if not branch else s.warning if behind else line_color)(
-            s.with_style(
-                'bold',
-                record.branch_name,
-            )
-            if current
-            else record.branch_name
-        )
-    )
-
-    if behind != 0:
-        line.append(s.warning(f'({behind} behind)'))
-
-    if branch:
-        if branch.upstream:
-            a, b = repo.ahead_behind(
-                branch.target,
-                branch.upstream.target,
-            )
-            if a or b:
-                line.append(
-                    s.with_style(
-                        'dim',
-                        '↕' if a and b else '↑' if a else '↓',
-                    )
-                )
-        else:
-            line.append(line_color('*'))
-
-    terminal.stdout(*line, end='')
+    """Print a branch line with ANSI colors."""
+    state = fmt.compute_branch_state(repo, record)
+    parts = fmt.format_branch_line(parent_prefix, state, current)
+    terminal.stdout(fmt.render_line_ansi(parts, current), end='')
 
 
 def _move(args: Args, command: str) -> None:

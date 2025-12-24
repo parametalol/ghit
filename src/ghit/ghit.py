@@ -2,8 +2,8 @@ import argparse
 import logging
 
 from . import branch_commands as bcom
+from . import interactive, terminal
 from . import stack_commands as scom
-from . import terminal
 from . import top_commands as top
 from .error import GhitError
 
@@ -50,7 +50,12 @@ def add_top_commands(parser: argparse.ArgumentParser, common: argparse.ArgumentP
         func=top.bottom
     )
     commands.add_parser('version', help='show program version', parents=[common]).set_defaults(func=top.version)
-
+    commands.add_parser(
+        'interactive',
+        aliases=['i'],
+        help='interactively navigate and checkout stack branches',
+        parents=[common],
+    ).set_defaults(func=interactive.navigate)
     return commands
 
 
