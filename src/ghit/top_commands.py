@@ -8,7 +8,7 @@ from . import styling as s
 from . import terminal
 from .__init__ import __version__
 from .args import Args
-from .common import GHIT_STACK_DIR, Context, connect, stack_filename
+from .common import GHIT_STACK_DIR, connect, stack_filename
 from .error import GhitError
 from .gh import GH
 from .gh_formatting import format_info

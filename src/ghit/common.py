@@ -125,10 +125,9 @@ def push_and_pr(
         update_upstream(ctx.repo, origin, branch)
 
     prs = ctx.gh.get_prs(record.branch_name)
-    for pr in prs:
-        logging.debug('found pr: %d closed=%s merged=%s', pr.number, pr.closed, pr.merged)
     if prs:
         for pr in prs:
+            logging.debug('found pr: %d closed=%s merged=%s', pr.number, pr.closed, pr.merged)
             if ctx.gh.update_dependencies(pr):
                 terminal.stdout(f'Updated dependencies in {pr_number_with_style(pr)}.')
 
@@ -188,19 +187,13 @@ def check_record(ctx: Context, record: Stack) -> bool:
     if ctx.gh and has_finished_pr(ctx, record):
         return True
     parent = record.get_parent()
-    if parent is None:
-        return True
-    if parent.branch_name is None:
-        return True
-    if record.branch_name is None:
+    if parent is None or parent.branch_name is None or record.branch_name is None:
         return True
     parent_name = parent.branch_name
     record_name = record.branch_name
     parent_ref = ctx.repo.references.get(f'refs/heads/{parent_name}')
     ref = ctx.repo.references.get(f'refs/heads/{record_name}')
-    if not ref:
-        return True
-    if not parent_ref:
+    if not ref or not parent_ref:
         return True
     a, b = ctx.repo.ahead_behind(parent_ref.target, ref.target)
     if not a:

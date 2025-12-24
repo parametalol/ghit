@@ -3,7 +3,6 @@ import pygit2 as git
 from . import styling as s
 from .args import Args
 from .common import (
-    Context,
     check_record,
     connect,
     push_and_pr,
