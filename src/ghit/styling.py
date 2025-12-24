@@ -31,7 +31,7 @@ ESC = '\033'
 
 
 def with_color(color: str, m: str) -> str:
-    return f"{ESC}[{COLORS[color]}m{m}{ESC}[{COLORS['default']}m"
+    return f'{ESC}[{COLORS[color]}m{m}{ESC}[{COLORS["default"]}m'
 
 
 def with_style(style: str, m: str) -> str:

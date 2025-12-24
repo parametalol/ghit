@@ -22,6 +22,7 @@ from .stack import Stack, open_stack
 @dataclass
 class Context:
     """Holds the repository, stack, and optional GitHub connection."""
+
     repo: git.Repository
     stack: Stack
     gh: GH | None
@@ -162,9 +163,7 @@ def has_finished_pr(ctx: Context, record: Stack) -> bool:
     if record.branch_name is None or not ctx.gh:
         return False
     prs = ctx.gh.get_prs(record.branch_name)
-    all_finished = all(
-        pr.state in ['CLOSED', 'MERGED'] and ctx.repo.lookup_branch(record.branch_name) for pr in prs
-    )
+    all_finished = all(pr.state in ['CLOSED', 'MERGED'] and ctx.repo.lookup_branch(record.branch_name) for pr in prs)
     for pr in prs:
         if pr.state in ['CLOSED', 'MERGED'] and ctx.repo.lookup_branch(record.branch_name):
             terminal.stdout(

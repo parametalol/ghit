@@ -71,9 +71,11 @@ def format_info(gh: GH, verbose: bool, record: Stack, pr: PR, stats: GH.PRStats)
 
 def _format_approved(approved: list[Review]) -> Iterator[str]:
     for r in approved:
-        yield s.with_style('dim', s.good('✓ Approved by ')) + s.with_style(
-            'italic', s.good(str(r.author))
-        ) + s.with_style('dim', s.good('.'))
+        yield (
+            s.with_style('dim', s.good('✓ Approved by '))
+            + s.with_style('italic', s.good(str(r.author)))
+            + s.with_style('dim', s.good('.'))
+        )
 
 
 def _format_not_sync(gh: GH, record: Stack, pr: PR) -> Iterator[str]:
@@ -98,9 +100,11 @@ def _format_change_requested(
     change_requested: list[Review],
 ) -> Iterator[str]:
     for review in change_requested:
-        yield s.with_style('dim', s.danger('✗ Changes requested by ')) + s.with_style(
-            'italic', s.danger(str(review.author))
-        ) + s.with_style('dim', s.danger(':'))
+        yield (
+            s.with_style('dim', s.danger('✗ Changes requested by '))
+            + s.with_style('italic', s.danger(str(review.author)))
+            + s.with_style('dim', s.danger(':'))
+        )
 
         yield f'  {s.colorful(review.url)}'
 
@@ -112,21 +116,25 @@ def _late_commment_sign(comment: Comment, merged_at: datetime | None) -> str:
 def _format_not_resolved(nr: dict[Author, list[Comment]], merged_at: datetime | None) -> Iterator[str]:
     for author, comments in nr.items():
         if len(comments) == 1:
-            yield s.with_style(
-                'dim',
-                s.warning('! No reaction to a comment by '),
-            ) + s.with_style(
-                'italic', s.warning(str(author))
-            ) + s.with_style('dim', s.warning(':'))
+            yield (
+                s.with_style(
+                    'dim',
+                    s.warning('! No reaction to a comment by '),
+                )
+                + s.with_style('italic', s.warning(str(author)))
+                + s.with_style('dim', s.warning(':'))
+            )
             yield '  ' + _late_commment_sign(comments[0], merged_at) + s.colorful(comments[0].url)
 
         else:
-            yield s.with_style(
-                'dim',
-                s.warning('! No reaction to comments by '),
-            ) + s.with_style(
-                'italic', s.warning(str(author))
-            ) + s.with_style('dim', s.warning(':'))
+            yield (
+                s.with_style(
+                    'dim',
+                    s.warning('! No reaction to comments by '),
+                )
+                + s.with_style('italic', s.warning(str(author)))
+                + s.with_style('dim', s.warning(':'))
+            )
 
             for i, comment in enumerate(comments, start=1):
                 yield '  ' + s.warning(f'{i}. ') + _late_commment_sign(comment, merged_at) + s.colorful(comment.url)

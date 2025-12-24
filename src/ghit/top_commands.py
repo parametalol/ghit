@@ -231,5 +231,6 @@ def init(args: Args) -> None:
         branch_name = repo.config['init.defaultBranch'] if repo.is_empty else get_current_branch(repo).branch_name
         ghitstack.write(branch_name + '\n')
 
+
 def version(_: Args) -> None:
     terminal.stdout(__version__)

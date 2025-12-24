@@ -26,6 +26,7 @@ COMMENT_BEGIN = '<!-- GHIT dependencies begin -->'
 COMMENT_FIRST_LINE = 'Current dependencies on/for this PR:'
 COMMENT_END = '<!-- GHIT dependencies end -->'
 
+
 def get_gh_owner_repository(url: ParseResult) -> tuple[str, str]:
     _, owner, repository = url.path.split('/', 2)
     return owner, repository.removesuffix('.git')
@@ -66,6 +67,7 @@ def is_gh(repo: git.Repository) -> bool:
     url = get_gh_url(repo)
     return url.netloc.find('github.com') >= 0
 
+
 def _find_stack_comment(body: str) -> tuple[int, int] | None:
     start_index = body.find(COMMENT_BEGIN)
     if start_index == -1:
@@ -76,13 +78,15 @@ def _find_stack_comment(body: str) -> tuple[int, int] | None:
     end_index += len(COMMENT_END)
     return (start_index, end_index)
 
+
 def _patch_body(body: str, comment: str) -> str | None:
     range = _find_stack_comment(body)
     if range:
-        if body[range[0]:range[1]] == comment:
+        if body[range[0] : range[1]] == comment:
             return None
-        return body[:range[0]] + comment + body[range[1]:]
+        return body[: range[0]] + comment + body[range[1] :]
     return body + '\n' + comment
+
 
 class GH:
     def __init__(self, repo: git.Repository, stack: Stack) -> None:
@@ -192,8 +196,11 @@ class GH:
             if not record.get_parent() and record.branch_name is not None:
                 prs[record.branch_name] = []
 
-        heads = [record.branch_name for record in self.stack.traverse()
-                 if (record.get_parent() or not record.length()) and record.branch_name is not None]
+        heads = [
+            record.branch_name
+            for record in self.stack.traverse()
+            if (record.get_parent() or not record.length()) and record.branch_name is not None
+        ]
         for pr in ghgql.search_prs(self.token, self.owner, self.repository, heads):
             if pr.head not in prs:
                 prs.update({pr.head: [pr]})

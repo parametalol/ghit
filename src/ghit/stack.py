@@ -12,11 +12,7 @@ if TYPE_CHECKING:
 
 class Stack:
     def __init__(
-        self,
-        branch_name: str | None = None,
-        enabled: bool = False,
-        parent: Stack | None = None,
-        in_stack: bool = True
+        self, branch_name: str | None = None, enabled: bool = False, parent: Stack | None = None, in_stack: bool = True
     ):
         self.branch_name = branch_name
         self.__parent = parent
@@ -63,8 +59,11 @@ class Stack:
         return self.branch_name is None
 
     def traverse(self, with_first_level: bool = True, ignored_disabled: bool = False) -> Iterator[Stack]:
-        if not self.is_root() and (self._enabled or ignored_disabled) and \
-            (self.get_parent(ignored_disabled) or with_first_level):
+        if (
+            not self.is_root()
+            and (self._enabled or ignored_disabled)
+            and (self.get_parent(ignored_disabled) or with_first_level)
+        ):
             yield self
         for r in self._children.values():
             yield from r.traverse(with_first_level, ignored_disabled)
@@ -93,7 +92,7 @@ class Stack:
         if lines is None:
             lines = []
         if not self.is_root():
-            lines.append(('' if self._enabled else '#') + '.' * depth + self.branch_name) # type: ignore
+            lines.append(('' if self._enabled else '#') + '.' * depth + self.branch_name)  # type: ignore
         for record in self._children.values():
             record.dumps(lines, depth + (not self.is_root()))
         return lines
@@ -120,7 +119,7 @@ def parse_line(line: str, parents: list[Stack]) -> Stack | None:
     if parent is None or enabled and depth - parent.depth > 1:
         raise GhitError('bad indent')
 
-    logging.debug('parsed: %s%s%s parent: %s', '' if enabled else '#', '.'*depth, branch_name, parent.branch_name)
+    logging.debug('parsed: %s%s%s parent: %s', '' if enabled else '#', '.' * depth, branch_name, parent.branch_name)
 
     child = parent.add_child(branch_name, enabled)
     parents.append(child)

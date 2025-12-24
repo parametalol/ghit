@@ -38,17 +38,17 @@ def add_top_commands(parser: argparse.ArgumentParser, common: argparse.ArgumentP
         help='check out one branch up the stack',
         parents=[common],
     ).set_defaults(func=top.up)
-    commands.add_parser(
-        'down', help='check out one branch down the stack', parents=[common]
-    ).set_defaults(func=top.down)
+    commands.add_parser('down', help='check out one branch down the stack', parents=[common]).set_defaults(
+        func=top.down
+    )
     commands.add_parser(
         'top',
         help='check out the top of the stack',
         parents=[common],
     ).set_defaults(func=top.top)
-    commands.add_parser(
-        'bottom', help='check out the bottom of the stack', parents=[common]
-    ).set_defaults(func=top.bottom)
+    commands.add_parser('bottom', help='check out the bottom of the stack', parents=[common]).set_defaults(
+        func=top.bottom
+    )
     commands.add_parser('version', help='show program version', parents=[common]).set_defaults(func=top.version)
 
     return commands

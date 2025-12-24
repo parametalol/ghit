@@ -56,7 +56,7 @@ def cleanup(args: Args) -> None:
 
         if not keep:
             record.disable()
-            terminal.stdout(s.warning('Disabled'), s.emphasis(record.branch_name)+s.warning('.'))
+            terminal.stdout(s.warning('Disabled'), s.emphasis(record.branch_name) + s.warning('.'))
 
     rewrite_stack(ctx)
 
