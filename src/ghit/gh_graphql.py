@@ -15,8 +15,19 @@ from . import terminal
 
 FIRST_FEW = {'first': 10}
 
-GQL_REACTION = gql.fields('content', gql.obj('user', 'login', 'name'))
 GQL_AUTHOR = gql.obj('author', 'login', gql.on('User', 'name'))
+
+# Light comment: no reactions (for listing)
+GQL_COMMENT_LIGHT = gql.fields(
+    'id',
+    'url',
+    'body',
+    'createdAt',
+    GQL_AUTHOR,
+)
+
+# Full comment: with reactions (for detailed views)
+GQL_REACTION = gql.fields('content', gql.obj('user', 'login', 'name'))
 GQL_COMMENT = gql.fields(
     'id',
     'url',
@@ -25,6 +36,15 @@ GQL_COMMENT = gql.fields(
     GQL_AUTHOR,
     gql.paged('reactions', FIRST_FEW, GQL_REACTION),
 )
+
+# Light review thread: no reactions on comments
+GQL_REVIEW_THREAD_LIGHT = gql.fields(
+    'path',
+    'isResolved',
+    'isOutdated',
+    gql.paged('comments', {'last': 1}, GQL_COMMENT_LIGHT),
+)
+
 GQL_REVIEW_THREAD = gql.fields(
     'path',
     'isResolved',
@@ -33,6 +53,27 @@ GQL_REVIEW_THREAD = gql.fields(
 )
 GQL_REVIEW = gql.fields('state', 'url', GQL_AUTHOR)
 GQL_COMMIT = gql.obj('commit', gql.paged('comments', {'last': 1}, GQL_COMMENT))
+
+# Light PR: for listing (no body, no commits, no reactions)
+GQL_PR_LIGHT = gql.fields(
+    'number',
+    'id',
+    'title',
+    GQL_AUTHOR,
+    'url',
+    'baseRefName',
+    'headRefName',
+    'isDraft',
+    'locked',
+    'closed',
+    'merged',
+    'mergedAt',
+    'state',
+    gql.paged('reviewThreads', FIRST_FEW, GQL_REVIEW_THREAD_LIGHT),
+    gql.paged('reviews', FIRST_FEW, GQL_REVIEW),
+)
+
+# Full PR: for operations that need body (submit, update)
 GQL_PR = gql.fields(
     'number',
     'id',
@@ -66,6 +107,22 @@ def make_prs_query(owner: str, repository: str, heads: list[str], after: str | N
         first_n_after(
             'search',
             gql.on('PullRequest', GQL_PR),
+            10,
+            after,
+            type='ISSUE',
+            query=f'"repo:{owner}/{repository} is:pr {h}"',
+        ),
+    )
+
+
+def make_prs_query_light(owner: str, repository: str, heads: list[str], after: str | None = None):
+    """Light version for listing - no body, no commits, no reactions."""
+    h = ' '.join(f'head:{head}' for head in heads)
+    return gql.query(
+        'query search_prs_light',
+        first_n_after(
+            'search',
+            gql.on('PullRequest', GQL_PR_LIGHT),
             10,
             after,
             type='ISSUE',
@@ -294,7 +351,6 @@ class PR:
     id: str
     author: Author
     title: str
-    body: str
     url: str
     state: str
     closed: bool
@@ -305,9 +361,11 @@ class PR:
     base: str
     head: str
     threads: gql.Pages[ReviewThread]
-    comments: gql.Pages[Comment]
     reviews: gql.Pages[Review]
-    commits: gql.Pages[Commit]
+    # Optional fields (not fetched by GQL_PR_LIGHT)
+    body: str = ''
+    comments: gql.Pages[Comment] | None = None
+    commits: gql.Pages[Commit] | None = None
 
     def __hash__(self) -> int:
         return self.number
@@ -438,6 +496,28 @@ def _make_simple_pr(edge: dict) -> SimplePR:
     )
 
 
+def make_pr_light(edge: dict) -> PR:
+    """Create PR from light query (no body, comments, commits)."""
+    node = edge['node']
+    return PR(
+        number=node['number'],
+        id=node['id'],
+        author=_make_author(node['author']),
+        title=node['title'],
+        url=node['url'],
+        draft=node['isDraft'],
+        locked=node['locked'],
+        closed=node['closed'],
+        merged=node['merged'],
+        merged_at=datetime.fromisoformat(node['mergedAt']) if node['merged'] else None,
+        state=node['state'],
+        base=node['baseRefName'],
+        head=node['headRefName'],
+        threads=gql.Pages('reviewThreads', _make_thread, node),
+        reviews=gql.Pages('reviews', _make_review, node),
+    )
+
+
 # endregion constructors
 
 
@@ -490,6 +570,25 @@ def search_prs(token: str, owner: str, repository: str, branches: list[str] | No
     for pr in prs:
         _fetch_level_three(token, owner, repository, pr_path, pr)
     return prs
+
+
+def search_prs_light(
+    token: str, owner: str, repository: str, branches: list[str] | None = None
+) -> list[PR]:
+    """Search PRs with minimal data (for listing). No body, comments, or commits."""
+    if branches is None:
+        branches = []
+    if not branches:
+        return []
+
+    prs_pages = gql.Pages('search', make_pr_light)
+    prs_pages.append_all(
+        lambda after: gql.path(
+            graphql(token, make_prs_query_light(owner, repository, branches, after)),
+            'data',
+        )
+    )
+    return prs_pages.data
 
 
 def _fetch_level_one(token: str, owner: str, repository: str, pr_path: list[str], pr: PR):

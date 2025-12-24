@@ -125,30 +125,13 @@ class GH:
 
     @classmethod
     def unresolved(cls, pr: ghgql.PR) -> dict[ghgql.Author, list[ghgql.Comment]]:
-        result = [thread for thread in pr.threads.data if not thread.resolved]
-
-        def author_reacted(thread: ghgql.ReviewThread) -> bool:
-            if not thread.comments.data:
-                logging.debug('no comments?')
-                return False
-            for reaction in thread.comments.data[-1].reactions.data:
-                if reaction.author.login == pr.author.login and reaction.content not in ['EYES', 'CONFUSED']:
-                    return True
-            return False
-
-        def author_commented(thread: ghgql.ReviewThread) -> bool:
-            return len(thread.comments.data) > 0 and thread.comments.data[-1].author.login == pr.author.login
-
+        """Return unresolved review thread comments grouped by author."""
         comments: dict[ghgql.Author, list[ghgql.Comment]] = {}
-        for thread in filter(
-            lambda cd: not author_commented(cd) and not author_reacted(cd),
-            result,
-        ):
-            for c in thread.comments.data:
-                if c.author in comments:
-                    comments[c.author].append(c)
-                else:
-                    comments[c.author] = [c]
+        for thread in pr.threads.data:
+            if thread.resolved:
+                continue
+            for comment in thread.comments.data:
+                comments.setdefault(comment.author, []).append(comment)
         return comments
 
     @dataclass
@@ -201,7 +184,7 @@ class GH:
             for record in self.stack.traverse()
             if (record.get_parent() or not record.length()) and record.branch_name is not None
         ]
-        for pr in ghgql.search_prs(self.token, self.owner, self.repository, heads):
+        for pr in ghgql.search_prs_light(self.token, self.owner, self.repository, heads):
             if pr.head not in prs:
                 prs.update({pr.head: [pr]})
             else:
