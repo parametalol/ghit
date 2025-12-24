@@ -316,6 +316,7 @@ class PR:
 @dataclass
 class SimplePR:
     """A simplified PR with just base and head branch names."""
+
     number: int
     base: str
     head: str
@@ -327,7 +328,9 @@ class SimplePR:
 # region constructors
 
 
-def _make_author(obj: dict) -> Author:
+def _make_author(obj: dict | None) -> Author:
+    if obj is None:
+        return Author(login='ghost', name=None)
     name = gql.path(obj, 'name')
     return Author(
         login=obj['login'],
