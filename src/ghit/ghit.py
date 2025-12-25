@@ -49,13 +49,14 @@ def add_top_commands(parser: argparse.ArgumentParser, common: argparse.ArgumentP
     commands.add_parser('bottom', help='check out the bottom of the stack', parents=[common]).set_defaults(
         func=top.bottom
     )
-    commands.add_parser('version', help='show program version', parents=[common]).set_defaults(func=top.version)
     commands.add_parser(
         'interactive',
         aliases=['i'],
         help='interactively navigate and checkout stack branches',
         parents=[common],
     ).set_defaults(func=interactive.navigate)
+
+    commands.add_parser('version', help='show program version', parents=[common]).set_defaults(func=top.version)
     return commands
 
 
