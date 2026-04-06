@@ -89,8 +89,8 @@ def format_branch_line(
             g1 = '└' if record.is_last_child() else '├'
             g2 = '⭦' if state.behind else '─'
         else:
-            g1 = '╵' if record.is_last_child() else '┆'
-            g2 = '⭦' if state.behind else '┄'
+            g1 = '└' if record.is_last_child() else '├'
+            g2 = '⭦' if state.behind else '╌'
         parts.append(LinePart(g1 + g2, base_style))
 
     # Branch name
