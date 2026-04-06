@@ -5,6 +5,7 @@ from pathlib import Path
 import pygit2 as git
 
 from . import formatting as fmt
+from . import styling as s
 from . import terminal
 from .__init__ import __version__
 from .args import Args
@@ -12,7 +13,7 @@ from .common import GHIT_STACK_DIR, connect, stack_filename
 from .error import GhitError
 from .gh import GH
 from .gh_formatting import format_info
-from .gitools import checkout, get_current_branch, insert
+from .gitools import checkout, get_current_branch, insert, last_commits
 from .stack import Stack, open_stack
 
 
@@ -60,7 +61,7 @@ def ls(args: Args) -> None:
     for record in ctx.stack.traverse():
         parent_prefix = parent_prefix[: max(record.depth - 1, 0)]
 
-        _print_line(ctx.repo, record.branch_name == checked_out, parent_prefix, record)
+        state = _print_line(ctx.repo, record.branch_name == checked_out, parent_prefix, record)
 
         if record.get_parent():
             parent_prefix.append(fmt.parent_tab(record))
@@ -73,6 +74,9 @@ def ls(args: Args) -> None:
         else:
             terminal.stdout()
 
+        if ctx.verbose and state.upstream_status and state.upstream_status != '*':
+            _print_upstream_commits(ctx.repo, parent_prefix, state)
+
     if error:
         raise GhitError
 
@@ -82,11 +86,38 @@ def _print_line(
     current: bool,
     parent_prefix: list[str],
     record: Stack,
-) -> None:
+) -> fmt.BranchState:
     """Print a branch line with ANSI colors."""
     state = fmt.compute_branch_state(repo, record)
     parts = fmt.format_branch_line(parent_prefix, state, current)
     terminal.stdout(fmt.render_line_ansi(parts, current), end='')
+    return state
+
+
+def _print_upstream_commits(
+    repo: git.Repository,
+    parent_prefix: list[str],
+    state: fmt.BranchState,
+) -> None:
+    branch = repo.branches.get(state.record.branch_name)
+    if not branch:
+        return
+    try:
+        upstream = branch.upstream
+    except KeyError:
+        return
+    if not upstream:
+        return
+    a, b = repo.ahead_behind(branch.target, upstream.target)
+    prefix = '  ' + ''.join(parent_prefix) + ('│   ' if state.record.length() else '    ')
+    if a:
+        for commit in last_commits(repo, branch.target, a):
+            terminal.stdout(prefix + s.inactive(f'↑ [{commit.short_id}] {commit.message.splitlines()[0]}'))
+    if a and b:
+        terminal.stdout(prefix)
+    if b:
+        for commit in last_commits(repo, upstream.target, b):
+            terminal.stdout(prefix + s.inactive(f'↓ [{commit.short_id}] {commit.message.splitlines()[0]}'))
 
 
 def _move(args: Args, command: str) -> None:
