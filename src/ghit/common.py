@@ -121,7 +121,11 @@ def push_and_pr(
     if not ctx.gh:
         raise GhitError(s.danger('No GitHub connection'))
     branch = ctx.repo.branches[record.branch_name]
-    if not branch.upstream:
+    try:
+        upstream = branch.upstream
+    except KeyError:
+        upstream = None
+    if not upstream:
         push_branch(origin, branch)
         update_upstream(ctx.repo, origin, branch)
 

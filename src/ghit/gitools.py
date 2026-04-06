@@ -52,22 +52,26 @@ def print_branch_info(repo: git.Repository, record: Stack, branch: git.Branch) -
 
 
 def print_upstream_info(repo: git.Repository, branch: git.Branch) -> None:
-    if not branch.upstream:
+    try:
+        upstream = branch.upstream
+    except KeyError:
+        upstream = None
+    if not upstream:
         terminal.stdout("The branch doesn't have an upstream.")
         return
     a, b = repo.ahead_behind(
         branch.target,
-        branch.upstream.target,
+        upstream.target,
     )
     if a:
         terminal.stdout(
-            'Following local commits are missing in upstream ' + s.emphasis(branch.upstream.branch_name) + ':'
+            'Following local commits are missing in upstream ' + s.emphasis(upstream.branch_name) + ':'
         )
         for commit in last_commits(repo, branch.target, a):
             terminal.stdout(s.inactive(f'\t[{commit.short_id}] {commit.message.splitlines()[0]}'))
     if b:
         terminal.stdout('Following upstream commits are missing in local ' + s.emphasis(branch.branch_name) + ':')
-        for commit in last_commits(repo, branch.upstream.target, b):
+        for commit in last_commits(repo, upstream.target, b):
             terminal.stdout(s.inactive(f'\t[{commit.short_id}] {commit.message.splitlines()[0]}'))
 
 
@@ -91,23 +95,14 @@ def checkout(repo: git.Repository, record: Stack) -> None:
     print_upstream_info(repo, branch)
 
 
-def get_branches_containing_commit(repo: git.Repository, commit_hash: str):
-    for branch_name in repo.branches:
-        branch = repo.branches.get(branch_name)
-        for commit in repo.walk(branch.target, git.GIT_SORT_TOPOLOGICAL):
-            if str(commit.id) == commit_hash:
-                yield branch_name
-
-
 def insert(repo: git.Repository, branch_name: str, stack: Stack):
     branch = repo.branches.get(branch_name)
     commit = repo.get(branch.target)
     if commit is None or not isinstance(commit, git.Commit):
         return
-    parent_commits = commit.parents
-    for p in parent_commits:
-        for b in get_branches_containing_commit(repo, str(p.id)):
-            s = stack.find(b)
-            if s:
-                s.add_child(branch_name, True, False)
+    for p in commit.parents:
+        for record in stack.traverse():
+            b = repo.branches.get(record.branch_name)
+            if b and repo.descendant_of(b.target, p.id):
+                record.add_child(branch_name, True, False)
                 return

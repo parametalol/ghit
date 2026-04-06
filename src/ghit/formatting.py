@@ -47,8 +47,12 @@ def compute_branch_state(repo: git.Repository, record: Stack) -> BranchState:
             behind, _ = repo.ahead_behind(parent.target, branch.target)
 
     if branch:
-        if branch.upstream:
-            a, b = repo.ahead_behind(branch.target, branch.upstream.target)
+        try:
+            upstream = branch.upstream
+        except KeyError:
+            upstream = None
+        if upstream:
+            a, b = repo.ahead_behind(branch.target, upstream.target)
             if a or b:
                 upstream_status = '↕' if a and b else '↑' if a else '↓'
         else:
