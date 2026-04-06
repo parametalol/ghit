@@ -53,7 +53,8 @@ def ls(args: Args) -> None:
     checked_out = get_current_branch(ctx.repo).branch_name
     parent_prefix: list[str] = []
 
-    if not ctx.stack.find(checked_out):
+    in_stack = bool(ctx.stack.find(checked_out))
+    if not in_stack:
         insert(ctx.repo, checked_out, ctx.stack)
 
     for record in ctx.stack.traverse():

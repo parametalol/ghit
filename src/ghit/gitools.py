@@ -97,12 +97,12 @@ def checkout(repo: git.Repository, record: Stack) -> None:
 
 def insert(repo: git.Repository, branch_name: str, stack: Stack):
     branch = repo.branches.get(branch_name)
-    commit = repo.get(branch.target)
-    if commit is None or not isinstance(commit, git.Commit):
+    if not branch:
         return
-    for p in commit.parents:
-        for record in stack.traverse():
-            b = repo.branches.get(record.branch_name)
-            if b and repo.descendant_of(b.target, p.id):
-                record.add_child(branch_name, True, False)
-                return
+    best: Stack | None = None
+    for record in stack.traverse():
+        b = repo.branches.get(record.branch_name)
+        if b and (b.target == branch.target or repo.descendant_of(branch.target, b.target)):
+            best = record
+    if best:
+        best.add_child(branch_name, True, False)
