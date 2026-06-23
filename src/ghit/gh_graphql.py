@@ -275,6 +275,17 @@ def make_create_pr_query(pr_input: dict) -> str:
     )
 
 
+def make_pr_body_query(owner: str, repository: str, pr_number: int) -> str:
+    return gql.query(
+        'query pr_body',
+        gql.func(
+            'repository',
+            {'owner': f'"{owner}"', 'name': f'"{repository}"'},
+            gql.func('pullRequest', {'number': pr_number}, 'body'),
+        ),
+    )
+
+
 def make_update_pr_query(pr_input: dict) -> str:
     return gql.query(
         'mutation update_pr',
@@ -363,7 +374,7 @@ class PR:
     threads: gql.Pages[ReviewThread]
     reviews: gql.Pages[Review]
     # Optional fields (not fetched by GQL_PR_LIGHT)
-    body: str = ''
+    body: str | None = None
     comments: gql.Pages[Comment] | None = None
     commits: gql.Pages[Commit] | None = None
 

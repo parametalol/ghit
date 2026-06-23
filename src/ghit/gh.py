@@ -193,10 +193,18 @@ class GH:
         logging.debug('Query done.')
         return prs
 
+    def _fetch_body(self, pr: ghgql.PR) -> str:
+        body_json = ghgql.graphql(
+            self.token,
+            ghgql.make_pr_body_query(self.owner, self.repository, pr.number),
+        )
+        pr.body = body_json['data']['repository']['pullRequest']['body']
+        return pr.body
+
     def update_dependencies(self, pr: ghgql.PR) -> bool:
         logging.debug('adding dependencies to pr #%s', pr.number)
         comment_md = self._make_stack_comment(pr.number)
-        body = _patch_body(pr.body, comment_md)
+        body = _patch_body(pr.body if pr.body is not None else self._fetch_body(pr), comment_md)
         if not body:
             logging.debug('dependencies are up to date')
             return False
